@@ -1,0 +1,5 @@
+/target/
+/.codex-background/
+/.agents/
+/skills-lock.json
+*.log
