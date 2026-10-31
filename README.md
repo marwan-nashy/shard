@@ -100,6 +100,12 @@ Run `release/Shard-Setup.exe` to install Shard into Program Files with Start Men
 
 ---
 
+## License
+
+Shard is free software licensed under the [GNU General Public License v3.0](LICENSE) (GPLv3).
+
+---
+
 ## Legal Disclaimer
 
 Shard is an independent, community-driven open-source software project. It is not affiliated with, associated with, sponsored by, or endorsed by Dynalist Inc. or Obsidian. All product names, logos, brands, and registered trademarks mentioned are property of their respective owners.
