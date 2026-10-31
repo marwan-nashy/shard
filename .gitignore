@@ -12,5 +12,4 @@ node_modules/
 /.agents/
 /skills-lock.json
 /release/
-Shard.exe
-Better Obsidian.exe
+generate_icons.py
