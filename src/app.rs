@@ -7,9 +7,10 @@ use crate::ui::editor::{render_editor_area, ViewMode};
 use crate::ui::embeds::NoteEmbedCache;
 use crate::ui::graph::GraphView;
 use crate::ui::modals::{
-    DeleteConfirmDialog, DeleteTarget, MissingWikilinkDialog, NewNoteDialog, PendingAction,
-    RenameNoteDialog, TemplatePickerDialog, UnsavedChoice, UnsavedDialog,
+    DeleteConfirmDialog, DeleteTarget, MissingWikilinkDialog, NewFolderDialog, NewNoteDialog,
+    PendingAction, RenameNoteDialog, TemplatePickerDialog, UnsavedChoice, UnsavedDialog,
 };
+use crate::ui::settings::SettingsDialog;
 use crate::ui::sidebar::{
     render_activity_ribbon, render_right_sidebar, render_sidebar_pane, RightSidebarTab, SidebarTab,
 };
@@ -25,6 +26,7 @@ pub struct BetterObsidianApp {
     pub config: AppConfig,
     pub vault: Option<Vault>,
     pub active_note: Option<ActiveNote>,
+    pub split_note: Option<ActiveNote>,
     pub active_canvas: Option<CanvasWorkspace>,
     pub open_tabs: Vec<PathBuf>,
     pub cached_notes: HashMap<PathBuf, ActiveNote>,
@@ -47,6 +49,7 @@ pub struct BetterObsidianApp {
     pub right_sidebar_open: bool,
     pub right_sidebar_tab: RightSidebarTab,
     pub show_shortcuts: bool,
+    pub settings_dialog: SettingsDialog,
     pub pending_heading_jump: Option<usize>,
     pub pending_template_insert: Option<String>,
     pub focus_search_next_frame: bool,
@@ -58,11 +61,19 @@ pub struct BetterObsidianApp {
     pub backlinks_target_path: Option<PathBuf>,
 
     pub new_note_dialog: NewNoteDialog,
+    pub new_folder_dialog: NewFolderDialog,
     pub rename_note_dialog: RenameNoteDialog,
     pub template_picker_dialog: TemplatePickerDialog,
     pub unsaved_dialog: UnsavedDialog,
     pub missing_wikilink_dialog: MissingWikilinkDialog,
     pub delete_confirm_dialog: DeleteConfirmDialog,
+
+    pub force_collapse_folders: bool,
+    pub in_note_search_open: bool,
+    pub in_note_search_query: String,
+    pub in_note_search_case_sensitive: bool,
+    pub in_note_search_match_idx: usize,
+    pub in_note_search_focus: bool,
 
     pub status_message: Option<(String, Instant)>,
     pub error_banner: Option<(String, Instant)>,
@@ -70,11 +81,12 @@ pub struct BetterObsidianApp {
 
 impl BetterObsidianApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        Theme::apply(&cc.egui_ctx);
         let config = AppConfig::load();
+        Theme::apply_with_config(&cc.egui_ctx, &config);
         let mut app = Self {
             vault: None,
             active_note: None,
+            split_note: None,
             active_canvas: None,
             open_tabs: Vec::new(),
             cached_notes: HashMap::new(),
@@ -95,6 +107,7 @@ impl BetterObsidianApp {
             right_sidebar_open: false,
             right_sidebar_tab: RightSidebarTab::Outline,
             show_shortcuts: false,
+            settings_dialog: SettingsDialog::default(),
             pending_heading_jump: None,
             pending_template_insert: None,
             focus_search_next_frame: false,
@@ -103,11 +116,18 @@ impl BetterObsidianApp {
             backlinks: Vec::new(),
             backlinks_target_path: None,
             new_note_dialog: NewNoteDialog::default(),
+            new_folder_dialog: NewFolderDialog::default(),
             rename_note_dialog: RenameNoteDialog::default(),
             template_picker_dialog: TemplatePickerDialog::default(),
             unsaved_dialog: UnsavedDialog::default(),
             missing_wikilink_dialog: MissingWikilinkDialog::default(),
             delete_confirm_dialog: DeleteConfirmDialog::default(),
+            force_collapse_folders: false,
+            in_note_search_open: false,
+            in_note_search_query: String::new(),
+            in_note_search_case_sensitive: false,
+            in_note_search_match_idx: 0,
+            in_note_search_focus: false,
             status_message: None,
             error_banner: None,
             config,
@@ -154,8 +174,14 @@ impl BetterObsidianApp {
     }
 
     pub fn save_active_note(&mut self) -> bool {
+        let mut any_saved = false;
+        if let (Some(vault), Some(split_note)) = (&self.vault, &mut self.split_note) {
+            if split_note.is_dirty() && vault.save_note(split_note).is_ok() {
+                any_saved = true;
+            }
+        }
         if self.active_note.is_none() {
-            return self.save_active_canvas();
+            return self.save_active_canvas() || any_saved;
         }
         if let (Some(vault), Some(active_note)) = (&self.vault, &mut self.active_note) {
             match vault.save_note(active_note) {
@@ -327,6 +353,14 @@ impl BetterObsidianApp {
         self.new_note_dialog.open(default_name);
     }
 
+    pub fn open_new_folder_dialog(&mut self) {
+        if self.vault.is_some() {
+            self.new_folder_dialog.open();
+        } else {
+            self.set_error("Please open a vault before creating folders.");
+        }
+    }
+
     pub fn request_delete_note(&mut self, path: PathBuf, display_name: String) {
         self.delete_confirm_dialog
             .open(DeleteTarget::Note(path, display_name));
@@ -345,10 +379,18 @@ impl BetterObsidianApp {
 
         if !is_canvas {
             self.close_tab(&path);
-            if self.active_note.as_ref().is_some_and(|n| n.abs_path == path) {
+            if self
+                .active_note
+                .as_ref()
+                .is_some_and(|n| n.abs_path == path)
+            {
                 self.active_note = None;
             }
-            if self.backlinks_target_path.as_ref().is_some_and(|p| p == &path) {
+            if self
+                .backlinks_target_path
+                .as_ref()
+                .is_some_and(|p| p == &path)
+            {
                 self.backlinks.clear();
                 self.backlinks_target_path = None;
             }
@@ -427,6 +469,23 @@ impl BetterObsidianApp {
             }
         }
         self.create_daily_note(&date);
+    }
+
+    pub fn is_bookmarked(&self, path: &Path) -> bool {
+        self.config.is_bookmarked(path)
+    }
+
+    pub fn toggle_bookmark(&mut self, path: PathBuf) {
+        let name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Note".to_string());
+        let added = self.config.toggle_bookmark(path);
+        if added {
+            self.set_status(format!("Bookmarked '{}'", name));
+        } else {
+            self.set_status(format!("Removed bookmark for '{}'", name));
+        }
     }
 
     fn create_daily_note(&mut self, date: &str) {
@@ -690,6 +749,22 @@ impl BetterObsidianApp {
                 }
             }
             Err(e) => self.set_error(format!("Failed to open note: {}", e)),
+        }
+    }
+
+    pub fn open_note_in_split(&mut self, target_path: &Path) {
+        let loaded = self
+            .vault
+            .as_ref()
+            .ok_or_else(|| std::io::Error::other("No vault is open"))
+            .and_then(|vault| vault.load_note(target_path));
+
+        match loaded {
+            Ok(note) => {
+                self.split_note = Some(note);
+                self.view_mode = ViewMode::Split;
+            }
+            Err(error) => self.set_error(format!("Could not open note in split: {error}")),
         }
     }
 
@@ -978,19 +1053,28 @@ impl BetterObsidianApp {
         if self.command_palette.is_open {
             return;
         }
+        if ctx.input(|i| i.key_pressed(Key::Escape)) && self.in_note_search_open {
+            self.in_note_search_open = false;
+        }
+
+        let is_shift_f =
+            ctx.input(|i| i.modifiers.command && i.modifiers.shift && i.key_pressed(Key::F));
+
         let input = ctx.input(|i| {
             let cmd = i.modifiers.command;
             let s = cmd && i.key_pressed(Key::S);
             let n = cmd && i.key_pressed(Key::N);
             let o = cmd && i.key_pressed(Key::O);
-            let f = cmd && i.key_pressed(Key::F);
+            let f = cmd && !i.modifiers.shift && i.key_pressed(Key::F);
             let e = cmd && i.key_pressed(Key::E);
             let w = cmd && i.key_pressed(Key::W);
             let d = cmd && i.key_pressed(Key::D);
             let g = cmd && i.key_pressed(Key::G);
             let next_tab = cmd && i.key_pressed(Key::Tab) && !i.modifiers.shift;
             let previous_tab = cmd && i.key_pressed(Key::Tab) && i.modifiers.shift;
-            (s, n, o, f, e, w, d, g, next_tab, previous_tab)
+            let comma = cmd && (i.key_pressed(Key::Comma) || i.key_pressed(Key::Colon));
+            let b = cmd && i.key_pressed(Key::B);
+            (s, n, o, f, e, w, d, g, next_tab, previous_tab, comma, b)
         });
 
         if input.0 {
@@ -1006,9 +1090,19 @@ impl BetterObsidianApp {
         if input.2 {
             self.pick_and_open_vault();
         }
-        if input.3 {
+        if is_shift_f {
             self.sidebar_tab = SidebarTab::Search;
+            self.left_sidebar_open = true;
             self.focus_search_next_frame = true;
+        } else if input.3 {
+            if self.active_note.is_some() {
+                self.in_note_search_open = true;
+                self.in_note_search_focus = true;
+            } else {
+                self.sidebar_tab = SidebarTab::Search;
+                self.left_sidebar_open = true;
+                self.focus_search_next_frame = true;
+            }
         }
         if input.4 {
             self.view_mode = match self.view_mode {
@@ -1038,6 +1132,15 @@ impl BetterObsidianApp {
         }
         if input.9 {
             self.cycle_note_tab(-1);
+        }
+        if input.10 {
+            self.settings_dialog.open();
+        }
+        if input.11 && !ctx.wants_keyboard_input() {
+            if let Some(active) = &self.active_note {
+                let path = active.abs_path.clone();
+                self.toggle_bookmark(path);
+            }
         }
     }
 
@@ -1210,14 +1313,16 @@ impl eframe::App for BetterObsidianApp {
                             ui.label(RichText::new("UTF-8").size(10.5).color(Theme::TEXT_DIMMED));
                             ui.separator();
 
-                            let (words, chars) = count_words_and_chars(&active.content);
-                            ui.label(
-                                RichText::new(format!("{} words, {} chars", words, chars))
-                                    .size(11.0)
-                                    .color(Theme::TEXT_MUTED),
-                            );
+                            if self.config.core_plugins.word_count {
+                                let (words, chars) = count_words_and_chars(&active.content);
+                                ui.label(
+                                    RichText::new(format!("{} words, {} chars", words, chars))
+                                        .size(11.0)
+                                        .color(Theme::TEXT_MUTED),
+                                );
+                            }
 
-                            if !self.backlinks.is_empty() {
+                            if self.config.core_plugins.backlinks && !self.backlinks.is_empty() {
                                 ui.separator();
                                 ui.label(
                                     RichText::new(format!("{} backlinks", self.backlinks.len()))
@@ -1333,7 +1438,12 @@ impl eframe::App for BetterObsidianApp {
             )
             .show(ctx, |ui| {
                 if let Some(canvas) = &mut self.active_canvas {
-                    if canvas.request_delete {
+                    if let Some(note_name) = canvas.request_open_note.take() {
+                        let full = self.vault.as_ref().map(|v| v.root_path.join(note_name));
+                        if let Some(path) = full {
+                            self.request_open_note(path);
+                        }
+                    } else if canvas.request_delete {
                         canvas.request_delete = false;
                         let path = canvas.path.clone();
                         let title = canvas.title.clone();
@@ -1360,6 +1470,14 @@ impl eframe::App for BetterObsidianApp {
             self.do_open_note(&path);
             self.graph_view.invalidate();
             self.set_status(format!("Created note '{}'", note.title));
+        }
+
+        if let Some(folder_path) = self.new_folder_dialog.render(ctx, &mut self.vault) {
+            let name = folder_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            self.set_status(format!("Created folder '{}'", name));
         }
 
         if let Some((path, new_name)) = self.rename_note_dialog.render(ctx) {
@@ -1398,6 +1516,22 @@ impl eframe::App for BetterObsidianApp {
                 }
                 UnsavedChoice::Cancel => {}
             }
+        }
+
+        let mut switch_vault = None;
+        let mut pick_vault = false;
+        self.settings_dialog.render(
+            ctx,
+            self.vault.as_ref(),
+            &mut self.config,
+            &mut switch_vault,
+            &mut pick_vault,
+        );
+        if let Some(path) = switch_vault {
+            self.open_vault(path);
+        }
+        if pick_vault {
+            self.pick_and_open_vault();
         }
 
         if let Some(action) = self.command_palette.render(
@@ -1447,8 +1581,23 @@ impl eframe::App for BetterObsidianApp {
                         self.request_delete_canvas(path, title);
                     }
                 }
+                PaletteAction::ShowBookmarks => {
+                    self.sidebar_tab = SidebarTab::Bookmarks;
+                    self.left_sidebar_open = true;
+                }
+                PaletteAction::ToggleBookmark => {
+                    if let Some(active) = &self.active_note {
+                        let path = active.abs_path.clone();
+                        self.toggle_bookmark(path);
+                    }
+                }
+                PaletteAction::OpenSettings => {
+                    self.settings_dialog.open();
+                }
             }
         }
+
+        self.force_collapse_folders = false;
     }
 }
 

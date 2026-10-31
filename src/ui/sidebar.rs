@@ -1,5 +1,6 @@
 use super::theme::Theme;
 use crate::app::BetterObsidianApp;
+use crate::config::FileSortOrder;
 use crate::ui::modals::DeleteTarget;
 use egui::{Color32, RichText, ScrollArea, Stroke, TextEdit};
 use std::collections::BTreeMap;
@@ -9,6 +10,7 @@ use std::path::PathBuf;
 pub enum SidebarTab {
     Notes,
     Search,
+    Bookmarks,
     #[allow(dead_code)]
     Backlinks,
     Graph,
@@ -34,9 +36,10 @@ enum RibbonAction {
 pub fn render_activity_ribbon(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     ui.vertical(|ui| {
         // Top global workspace actions & explorer tabs
-        let ribbon_items: [(RibbonAction, &str); 6] = [
+        let ribbon_items: [(RibbonAction, &str); 7] = [
             (RibbonAction::Tab(SidebarTab::Notes), "Files"),
             (RibbonAction::Tab(SidebarTab::Search), "Search · Ctrl+F"),
+            (RibbonAction::Tab(SidebarTab::Bookmarks), "Bookmarks"),
             (RibbonAction::Tab(SidebarTab::Tags), "Tags"),
             (RibbonAction::Tab(SidebarTab::Graph), "Graph view · Ctrl+G"),
             (RibbonAction::Daily, "Open today's daily note · Ctrl+D"),
@@ -44,6 +47,20 @@ pub fn render_activity_ribbon(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
         ];
 
         for (action, label) in ribbon_items {
+            let is_enabled = match action {
+                RibbonAction::Tab(SidebarTab::Notes) => app.config.core_plugins.file_explorer,
+                RibbonAction::Tab(SidebarTab::Search) => app.config.core_plugins.search,
+                RibbonAction::Tab(SidebarTab::Bookmarks) => app.config.core_plugins.bookmarks,
+                RibbonAction::Tab(SidebarTab::Tags) => app.config.core_plugins.tags,
+                RibbonAction::Tab(SidebarTab::Graph) => app.config.core_plugins.graph_view,
+                RibbonAction::Daily => app.config.core_plugins.daily_notes,
+                RibbonAction::Template => app.config.core_plugins.templates,
+                _ => true,
+            };
+            if !is_enabled {
+                continue;
+            }
+
             let is_selected = match action {
                 RibbonAction::Tab(tab) => app.sidebar_tab == tab && app.left_sidebar_open,
                 _ => false,
@@ -105,6 +122,23 @@ pub fn render_activity_ribbon(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
             ui.add_space(4.0);
 
+            // Settings (Gear icon)
+            let (s_rect, s_resp) =
+                ui.allocate_exact_size(egui::vec2(34.0, 32.0), egui::Sense::click());
+            let s_color = if s_resp.hovered() {
+                Theme::TEXT_PRIMARY
+            } else {
+                Theme::TEXT_DIMMED
+            };
+            if s_resp.hovered() {
+                ui.painter().rect_filled(s_rect, 4.0, Theme::BG_CARD);
+            }
+            paint_settings_gear_icon(ui.painter(), s_rect.center(), s_color);
+            if s_resp.clicked() {
+                app.settings_dialog.open();
+            }
+            s_resp.on_hover_text("Settings · Ctrl+,");
+
             // Shortcuts / Help (?)
             let (h_rect, h_resp) =
                 ui.allocate_exact_size(egui::vec2(34.0, 32.0), egui::Sense::click());
@@ -161,17 +195,31 @@ pub fn render_activity_ribbon(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
 
 pub fn render_sidebar_pane(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     ui.horizontal(|ui| {
-        let pane_title = match app.sidebar_tab {
-            SidebarTab::Notes => "FILES",
-            SidebarTab::Search => "SEARCH",
-            SidebarTab::Backlinks => "BACKLINKS",
-            SidebarTab::Graph => "GRAPH",
-            SidebarTab::Tags => "TAGS",
-            SidebarTab::Outline => "OUTLINE",
+        let vault_title = if app.sidebar_tab == SidebarTab::Notes {
+            app.vault
+                .as_ref()
+                .map(|v| {
+                    v.root_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_uppercase()
+                })
+                .unwrap_or_else(|| "FILES".to_string())
+        } else {
+            match app.sidebar_tab {
+                SidebarTab::Search => "SEARCH".to_string(),
+                SidebarTab::Bookmarks => "BOOKMARKS".to_string(),
+                SidebarTab::Backlinks => "BACKLINKS".to_string(),
+                SidebarTab::Graph => "GRAPH".to_string(),
+                SidebarTab::Tags => "TAGS".to_string(),
+                SidebarTab::Outline => "OUTLINE".to_string(),
+                _ => "FILES".to_string(),
+            }
         };
 
         ui.label(
-            RichText::new(pane_title)
+            RichText::new(vault_title)
                 .strong()
                 .size(10.5)
                 .color(Theme::TEXT_DIMMED),
@@ -179,31 +227,106 @@ pub fn render_sidebar_pane(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if app.sidebar_tab == SidebarTab::Notes {
-                // New note button
-                let (r, resp) =
+                // 1. Collapse all
+                let (c_rect, c_resp) =
                     ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
-                if resp.hovered() {
-                    ui.painter().rect_filled(r, 3.0, Theme::BG_CARD);
+                if c_resp.hovered() {
+                    ui.painter().rect_filled(c_rect, 3.0, Theme::BG_CARD);
                 }
-                let color = if resp.hovered() {
+                let c_color = if c_resp.hovered() {
                     Theme::TEXT_PRIMARY
                 } else {
                     Theme::TEXT_MUTED
                 };
-                let stroke = Stroke::new(1.3_f32, color);
-                let c = r.center();
-                ui.painter().line_segment(
-                    [c + egui::vec2(-4.0, 0.0), c + egui::vec2(4.0, 0.0)],
-                    stroke,
-                );
-                ui.painter().line_segment(
-                    [c + egui::vec2(0.0, -4.0), c + egui::vec2(0.0, 4.0)],
-                    stroke,
-                );
-                if resp.clicked() {
+                paint_collapse_icon(ui.painter(), c_rect.center(), c_color);
+                if c_resp.clicked() {
+                    app.force_collapse_folders = true;
+                }
+                c_resp.on_hover_text("Collapse all");
+
+                // 2. Sort order menu
+                ui.menu_button("↕", |ui| {
+                    if ui
+                        .selectable_label(
+                            app.config.file_sort_order == FileSortOrder::Alphabetical,
+                            "File name (A to Z)",
+                        )
+                        .clicked()
+                    {
+                        app.config.file_sort_order = FileSortOrder::Alphabetical;
+                        app.config.save();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .selectable_label(
+                            app.config.file_sort_order == FileSortOrder::AlphabeticalReverse,
+                            "File name (Z to A)",
+                        )
+                        .clicked()
+                    {
+                        app.config.file_sort_order = FileSortOrder::AlphabeticalReverse;
+                        app.config.save();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .selectable_label(
+                            app.config.file_sort_order == FileSortOrder::ModifiedNewest,
+                            "Modified time (new to old)",
+                        )
+                        .clicked()
+                    {
+                        app.config.file_sort_order = FileSortOrder::ModifiedNewest;
+                        app.config.save();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .selectable_label(
+                            app.config.file_sort_order == FileSortOrder::ModifiedOldest,
+                            "Modified time (old to new)",
+                        )
+                        .clicked()
+                    {
+                        app.config.file_sort_order = FileSortOrder::ModifiedOldest;
+                        app.config.save();
+                        ui.close_menu();
+                    }
+                })
+                .response
+                .on_hover_text("Change sort order");
+
+                // 3. New folder button
+                let (f_rect, f_resp) =
+                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+                if f_resp.hovered() {
+                    ui.painter().rect_filled(f_rect, 3.0, Theme::BG_CARD);
+                }
+                let f_color = if f_resp.hovered() {
+                    Theme::TEXT_PRIMARY
+                } else {
+                    Theme::TEXT_MUTED
+                };
+                paint_new_folder_icon(ui.painter(), f_rect.center(), f_color);
+                if f_resp.clicked() {
+                    app.open_new_folder_dialog();
+                }
+                f_resp.on_hover_text("New folder");
+
+                // 4. New note button
+                let (n_rect, n_resp) =
+                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+                if n_resp.hovered() {
+                    ui.painter().rect_filled(n_rect, 3.0, Theme::BG_CARD);
+                }
+                let n_color = if n_resp.hovered() {
+                    Theme::TEXT_PRIMARY
+                } else {
+                    Theme::TEXT_MUTED
+                };
+                paint_new_note_icon(ui.painter(), n_rect.center(), n_color);
+                if n_resp.clicked() {
                     app.open_new_note_dialog();
                 }
-                resp.on_hover_text("New note · Ctrl+N");
+                n_resp.on_hover_text("New note · Ctrl+N");
             }
         });
     });
@@ -221,6 +344,7 @@ pub fn render_sidebar_pane(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     match app.sidebar_tab {
         SidebarTab::Notes => render_notes_tab(ui, app),
         SidebarTab::Search => render_search_tab(ui, app),
+        SidebarTab::Bookmarks => render_bookmarks_tab(ui, app),
         SidebarTab::Backlinks => render_backlinks_tab(ui, app),
         SidebarTab::Graph => {
             let count = app.vault.as_ref().map_or(0, |vault| vault.notes.len());
@@ -253,11 +377,23 @@ pub fn render_sidebar_pane(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
 
 pub fn render_right_sidebar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     ui.horizontal(|ui| {
-        for (tab, name) in [
-            (RightSidebarTab::Outline, "Outline"),
-            (RightSidebarTab::Backlinks, "Backlinks"),
-            (RightSidebarTab::Tags, "Tags"),
-        ] {
+        let available_tabs = [
+            (
+                RightSidebarTab::Outline,
+                "Outline",
+                app.config.core_plugins.outline,
+            ),
+            (
+                RightSidebarTab::Backlinks,
+                "Backlinks",
+                app.config.core_plugins.backlinks,
+            ),
+            (RightSidebarTab::Tags, "Tags", app.config.core_plugins.tags),
+        ];
+        for (tab, name, enabled) in available_tabs {
+            if !enabled {
+                continue;
+            }
             let active = app.right_sidebar_tab == tab;
             let resp = ui.selectable_label(active, name);
             if resp.clicked() {
@@ -290,6 +426,64 @@ pub fn render_right_sidebar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     }
 }
 
+fn paint_new_note_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
+    let stroke = Stroke::new(1.3_f32, color);
+    let r = egui::Rect::from_center_size(c, egui::vec2(10.0, 12.0));
+    painter.rect_stroke(r, 1.0, stroke);
+    painter.line_segment(
+        [c + egui::vec2(-2.5, 0.0), c + egui::vec2(2.5, 0.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + egui::vec2(0.0, -2.5), c + egui::vec2(0.0, 2.5)],
+        stroke,
+    );
+}
+
+fn paint_new_folder_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
+    let stroke = Stroke::new(1.3_f32, color);
+    let body = egui::Rect::from_min_size(c + egui::vec2(-6.0, -3.0), egui::vec2(12.0, 9.0));
+    painter.rect_stroke(body, 1.0, stroke);
+    painter.line_segment(
+        [c + egui::vec2(-6.0, -3.0), c + egui::vec2(-6.0, -5.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + egui::vec2(-6.0, -5.0), c + egui::vec2(-2.0, -5.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + egui::vec2(-2.0, -5.0), c + egui::vec2(-1.0, -3.0)],
+        stroke,
+    );
+    let pc = body.center();
+    painter.line_segment(
+        [pc + egui::vec2(-2.0, 0.0), pc + egui::vec2(2.0, 0.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [pc + egui::vec2(0.0, -2.0), pc + egui::vec2(0.0, 2.0)],
+        stroke,
+    );
+}
+
+fn paint_collapse_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
+    let stroke = Stroke::new(1.3_f32, color);
+    painter.line_segment(
+        [c + egui::vec2(-3.5, -4.0), c + egui::vec2(0.0, -1.5)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + egui::vec2(0.0, -1.5), c + egui::vec2(3.5, -4.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + egui::vec2(-3.5, 4.0), c + egui::vec2(0.0, 1.5)],
+        stroke,
+    );
+    painter.line_segment([c + egui::vec2(0.0, 1.5), c + egui::vec2(3.5, 4.0)], stroke);
+}
+
 fn paint_prompt_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
     let stroke = Stroke::new(1.4_f32, color);
     painter.line_segment(
@@ -314,6 +508,17 @@ fn paint_vault_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
         [c + egui::vec2(-7.0, -1.0), c + egui::vec2(7.0, -1.0)],
         stroke,
     );
+}
+
+fn paint_settings_gear_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
+    let stroke = Stroke::new(1.3_f32, color);
+    painter.circle_stroke(c, 3.8, stroke);
+    painter.circle_filled(c, 1.4, color);
+    for i in 0..6 {
+        let angle = (i as f32) * std::f32::consts::PI / 3.0;
+        let dir = egui::vec2(angle.cos(), angle.sin());
+        painter.line_segment([c + dir * 4.2, c + dir * 6.2], stroke);
+    }
 }
 
 fn paint_help_icon(painter: &egui::Painter, c: egui::Pos2, color: Color32) {
@@ -410,6 +615,20 @@ fn paint_sidebar_icon(
             painter.circle_stroke(point(-2.0, -2.0), 5.5, stroke);
             painter.line_segment([point(2.0, 2.0), point(7.0, 7.0)], stroke);
         }
+        SidebarTab::Bookmarks => {
+            let ribbon = [
+                (-5.0, -7.0),
+                (5.0, -7.0),
+                (5.0, 7.0),
+                (0.0, 3.5),
+                (-5.0, 7.0),
+            ];
+            for index in 0..ribbon.len() {
+                let start = ribbon[index];
+                let end = ribbon[(index + 1) % ribbon.len()];
+                painter.line_segment([point(start.0, start.1), point(end.0, end.1)], stroke);
+            }
+        }
         SidebarTab::Backlinks => {
             painter.line_segment([point(-6.0, 6.0), point(5.0, -5.0)], stroke);
             painter.line_segment([point(0.0, -5.0), point(5.0, -5.0)], stroke);
@@ -485,6 +704,133 @@ fn render_outline_tab(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
         if app.view_mode == crate::ui::editor::ViewMode::Preview {
             app.view_mode = crate::ui::editor::ViewMode::Edit;
         }
+    }
+}
+
+fn render_bookmarks_tab(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
+    if app.config.bookmarks.is_empty() {
+        ui.vertical_centered(|ui| {
+            ui.add_space(24.0);
+            ui.label(
+                RichText::new("No bookmarks yet")
+                    .strong()
+                    .color(Theme::TEXT_MUTED),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(
+                    "Bookmark notes using Ctrl+B,\nthe tab bar menu, or file context menu.",
+                )
+                .size(11.0)
+                .color(Theme::TEXT_DIMMED),
+            );
+        });
+        return;
+    }
+
+    let mut note_to_open = None;
+    let mut open_split = None;
+    let mut remove_bookmark = None;
+    let active_path = app.active_note.as_ref().map(|n| &n.abs_path);
+
+    ScrollArea::vertical()
+        .id_salt("sidebar_bookmarks_scroll")
+        .show(ui, |ui| {
+            ui.add_space(2.0);
+            for path in &app.config.bookmarks {
+                let is_active = active_path.is_some_and(|active| active == path);
+                let title = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Note".to_string());
+                let rel_str = app
+                    .vault
+                    .as_ref()
+                    .and_then(|v| path.strip_prefix(&v.root_path).ok())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| title.clone());
+
+                let avail_w = ui.available_width();
+                let (rect, response) =
+                    ui.allocate_exact_size(egui::vec2(avail_w, 24.0), egui::Sense::click());
+
+                if is_active {
+                    ui.painter().rect_filled(rect, 4.0, Theme::BG_NOTE_ACTIVE);
+                    ui.painter().line_segment(
+                        [
+                            rect.left_top() + egui::vec2(1.0, 2.0),
+                            rect.left_bottom() + egui::vec2(1.0, -2.0),
+                        ],
+                        Stroke::new(2.5_f32, Theme::ACCENT_BLUE),
+                    );
+                } else if response.hovered() {
+                    ui.painter().rect_filled(rect, 4.0, Theme::BG_ROW_HOVER);
+                }
+
+                let icon_pos = rect.left_center() + egui::vec2(10.0, 0.0);
+                let icon_color = if is_active {
+                    Theme::ACCENT_BLUE
+                } else if response.hovered() {
+                    Theme::TEXT_PRIMARY
+                } else {
+                    Theme::TEXT_MUTED
+                };
+                let bm_stroke = Stroke::new(1.2_f32, icon_color);
+                let bm_pts = [
+                    icon_pos + egui::vec2(-3.0, -4.5),
+                    icon_pos + egui::vec2(3.0, -4.5),
+                    icon_pos + egui::vec2(3.0, 4.5),
+                    icon_pos + egui::vec2(0.0, 2.0),
+                    icon_pos + egui::vec2(-3.0, 4.5),
+                ];
+                for i in 0..bm_pts.len() {
+                    ui.painter()
+                        .line_segment([bm_pts[i], bm_pts[(i + 1) % bm_pts.len()]], bm_stroke);
+                }
+
+                let text_pos = rect.left_center() + egui::vec2(20.0, 0.0);
+                ui.painter().text(
+                    text_pos,
+                    egui::Align2::LEFT_CENTER,
+                    &title,
+                    egui::FontId::proportional(12.5),
+                    icon_color,
+                );
+
+                if response.clicked() {
+                    note_to_open = Some(path.clone());
+                }
+
+                let response = response.on_hover_text(&rel_str);
+                response.context_menu(|ui| {
+                    if ui.button("Open note").clicked() {
+                        note_to_open = Some(path.clone());
+                        ui.close_menu();
+                    }
+                    if ui.button("Open to the right").clicked() {
+                        open_split = Some(path.clone());
+                        ui.close_menu();
+                    }
+                    if ui
+                        .button(RichText::new("Remove bookmark").color(Theme::ACCENT_RED))
+                        .clicked()
+                    {
+                        remove_bookmark = Some(path.clone());
+                        ui.close_menu();
+                    }
+                });
+            }
+        });
+
+    if let Some(path) = note_to_open {
+        app.request_open_note(path);
+    }
+    if let Some(path) = open_split {
+        app.open_note_in_split(&path);
+    }
+    if let Some(path) = remove_bookmark {
+        app.config.remove_bookmark(&path);
+        app.set_status("Removed bookmark");
     }
 }
 
@@ -584,11 +930,14 @@ fn render_notes_tab(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
         }
         folder.notes.push((note.0, note.1, note.2));
     }
+    sort_tree(&mut tree, app.config.file_sort_order);
 
     let mut note_to_open = None;
     let mut canvas_to_open = None;
+    let mut open_split = None;
     let mut rename_request = None;
     let mut delete_request = None;
+    let mut bookmark_toggle = None;
 
     ScrollArea::vertical()
         .id_salt("sidebar_notes_scroll")
@@ -602,8 +951,12 @@ fn render_notes_tab(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
                 0,
                 active_path.as_ref(),
                 &mut note_to_open,
+                &mut open_split,
                 &mut rename_request,
                 &mut delete_request,
+                &mut bookmark_toggle,
+                &app.config.bookmarks,
+                app.force_collapse_folders,
             );
             if let Some(vault) = &app.vault {
                 if !vault.canvases.is_empty() {
@@ -695,6 +1048,9 @@ fn render_notes_tab(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
         app.active_canvas = None;
         app.request_open_note(path);
     }
+    if let Some(path) = open_split {
+        app.open_note_in_split(&path);
+    }
     if let Some(path) = canvas_to_open {
         app.open_canvas(&path);
     }
@@ -706,6 +1062,9 @@ fn render_notes_tab(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
             DeleteTarget::Note(path, title) => app.request_delete_note(path, title),
             DeleteTarget::Canvas(path, title) => app.request_delete_canvas(path, title),
         }
+    }
+    if let Some(path) = bookmark_toggle {
+        app.toggle_bookmark(path);
     }
 }
 
@@ -797,6 +1156,38 @@ struct FolderNode {
     notes: Vec<(PathBuf, String, String)>,
 }
 
+fn sort_tree(folder: &mut FolderNode, order: FileSortOrder) {
+    match order {
+        FileSortOrder::Alphabetical => {
+            folder
+                .notes
+                .sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+        }
+        FileSortOrder::AlphabeticalReverse => {
+            folder
+                .notes
+                .sort_by(|a, b| b.1.to_lowercase().cmp(&a.1.to_lowercase()));
+        }
+        FileSortOrder::ModifiedNewest => {
+            folder.notes.sort_by(|a, b| {
+                let time_a = std::fs::metadata(&a.0).and_then(|m| m.modified()).ok();
+                let time_b = std::fs::metadata(&b.0).and_then(|m| m.modified()).ok();
+                time_b.cmp(&time_a)
+            });
+        }
+        FileSortOrder::ModifiedOldest => {
+            folder.notes.sort_by(|a, b| {
+                let time_a = std::fs::metadata(&a.0).and_then(|m| m.modified()).ok();
+                let time_b = std::fs::metadata(&b.0).and_then(|m| m.modified()).ok();
+                time_a.cmp(&time_b)
+            });
+        }
+    }
+    for child in folder.directories.values_mut() {
+        sort_tree(child, order);
+    }
+}
+
 fn render_folder_contents(
     ui: &mut egui::Ui,
     folder: &FolderNode,
@@ -804,8 +1195,12 @@ fn render_folder_contents(
     depth: usize,
     active_path: Option<&PathBuf>,
     note_to_open: &mut Option<PathBuf>,
+    open_split: &mut Option<PathBuf>,
     rename_request: &mut Option<(PathBuf, String)>,
     delete_request: &mut Option<DeleteTarget>,
+    bookmark_toggle: &mut Option<PathBuf>,
+    bookmarked: &[PathBuf],
+    force_collapse: bool,
 ) {
     let indent = (depth as f32) * 12.0;
 
@@ -819,21 +1214,30 @@ fn render_folder_contents(
             if indent > 0.0 {
                 ui.add_space(indent);
             }
-            egui::CollapsingHeader::new(RichText::new(name).size(12.0).color(Theme::TEXT_PRIMARY))
-                .id_salt(("vault_folder", path.clone()))
-                .default_open(true)
-                .show(ui, |ui| {
-                    render_folder_contents(
-                        ui,
-                        child,
-                        &path,
-                        depth + 1,
-                        active_path,
-                        note_to_open,
-                        rename_request,
-                        delete_request,
-                    );
-                });
+            let mut collapsing = egui::CollapsingHeader::new(
+                RichText::new(name).size(12.0).color(Theme::TEXT_PRIMARY),
+            )
+            .id_salt(("vault_folder", path.clone()))
+            .default_open(true);
+            if force_collapse {
+                collapsing = collapsing.open(Some(false));
+            }
+            collapsing.show(ui, |ui| {
+                render_folder_contents(
+                    ui,
+                    child,
+                    &path,
+                    depth + 1,
+                    active_path,
+                    note_to_open,
+                    open_split,
+                    rename_request,
+                    delete_request,
+                    bookmark_toggle,
+                    bookmarked,
+                    force_collapse,
+                );
+            });
         });
     }
 
@@ -879,6 +1283,22 @@ fn render_folder_contents(
         }
         let response = response.on_hover_text(rel_path);
         response.context_menu(|ui| {
+            if ui.button("Open to the right").clicked() {
+                *open_split = Some(abs_path.clone());
+                ui.close_menu();
+            }
+            let is_bm = bookmarked.contains(abs_path);
+            if ui
+                .button(if is_bm {
+                    "Remove bookmark"
+                } else {
+                    "Bookmark note"
+                })
+                .clicked()
+            {
+                *bookmark_toggle = Some(abs_path.clone());
+                ui.close_menu();
+            }
             if ui.button("Rename note…").clicked() {
                 *rename_request = Some((abs_path.clone(), rel_path.clone()));
                 ui.close_menu();

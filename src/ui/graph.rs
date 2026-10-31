@@ -148,8 +148,8 @@ impl GraphView {
         let available = ui.available_size().max(Vec2::splat(120.0));
         let (canvas, canvas_response) = ui.allocate_exact_size(available, Sense::drag());
         let painter = ui.painter_at(canvas);
-        painter.rect_filled(canvas, 8.0, Theme::BG_SECONDARY);
-        painter.rect_stroke(canvas, 8.0, Stroke::new(1.0_f32, Theme::BORDER));
+        painter.rect_filled(canvas, 6.0, Color32::from_rgb(22, 22, 22));
+        painter.rect_stroke(canvas, 6.0, Stroke::new(1.0_f32, Theme::BORDER));
 
         if canvas_response.dragged() {
             self.pan += ui.input(|input| input.pointer.delta());
@@ -175,14 +175,40 @@ impl GraphView {
 
         let center = canvas.center() + self.pan;
         let to_screen = |position: Vec2| center + position * self.zoom;
+
+        let mouse_pos = ui.input(|i| i.pointer.hover_pos());
+        let mut hovered_node = None;
+        if let Some(mouse) = mouse_pos {
+            for (index, _node) in graph.nodes.iter().enumerate() {
+                if !visible[index] {
+                    continue;
+                }
+                let degree = graph.adjacency[index].len();
+                let radius =
+                    (6.0 + (degree as f32).sqrt() * 1.2_f32).clamp(6.0, 13.0) * self.zoom.sqrt();
+                let position = to_screen(self.positions[index]);
+                if mouse.distance(position) <= radius + 4.0 {
+                    hovered_node = Some(index);
+                    break;
+                }
+            }
+        }
+
         for (source, target) in &graph.edges {
             if visible[*source] && visible[*target] {
+                let is_highlighted = hovered_node.is_some_and(|h| h == *source || h == *target)
+                    || focus_index.is_some_and(|f| f == *source || f == *target);
+                let edge_stroke = if is_highlighted {
+                    Stroke::new(1.6_f32, Theme::ACCENT_PURPLE)
+                } else {
+                    Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(75, 75, 85, 110))
+                };
                 painter.line_segment(
                     [
                         to_screen(self.positions[*source]),
                         to_screen(self.positions[*target]),
                     ],
-                    Stroke::new(1.0_f32, Color32::from_rgb(64, 91, 83)),
+                    edge_stroke,
                 );
             }
         }
@@ -194,6 +220,10 @@ impl GraphView {
             }
             let degree = graph.adjacency[index].len();
             let is_focus = Some(index) == focus_index;
+            let is_hovered = Some(index) == hovered_node;
+            let is_neighbor = hovered_node.is_some_and(|h| graph.adjacency[h].contains(&index))
+                || focus_index.is_some_and(|f| graph.adjacency[f].contains(&index));
+
             let radius =
                 (6.0 + (degree as f32).sqrt() * 1.2_f32).clamp(6.0, 13.0) * self.zoom.sqrt();
             let position = to_screen(self.positions[index]);
@@ -206,26 +236,43 @@ impl GraphView {
                 ui.id().with(("graph_node", index)),
                 Sense::click(),
             );
-            let color = if is_focus {
-                Theme::ACCENT_ORANGE
+
+            let (fill_color, text_color) = if is_hovered {
+                (Theme::ACCENT_PURPLE, Theme::TEXT_PRIMARY)
+            } else if is_focus {
+                (Theme::ACCENT_BLUE, Theme::TEXT_PRIMARY)
+            } else if is_neighbor {
+                (Color32::from_rgb(100, 130, 200), Theme::TEXT_PRIMARY)
             } else if degree == 0 {
-                Theme::TEXT_DIMMED
+                (Color32::from_rgb(75, 75, 82), Theme::TEXT_DIMMED)
             } else {
-                Theme::ACCENT_PURPLE
+                (Color32::from_rgb(115, 115, 130), Theme::TEXT_MUTED)
             };
-            painter.circle_filled(position, radius, color);
-            painter.circle_stroke(position, radius, Stroke::new(1.2_f32, Theme::BG_SECONDARY));
+
+            if is_hovered || is_focus {
+                painter.circle_stroke(
+                    position,
+                    radius + 3.0,
+                    Stroke::new(
+                        1.5_f32,
+                        if is_hovered {
+                            Theme::ACCENT_PURPLE
+                        } else {
+                            Theme::ACCENT_BLUE
+                        },
+                    ),
+                );
+            }
+
+            painter.circle_filled(position, radius, fill_color);
+            painter.circle_stroke(position, radius, Stroke::new(1.0_f32, Theme::BG_PRIMARY));
             let title = compact_title(&node.note.title, 30);
             painter.text(
                 position + Vec2::new(0.0, radius + 4.0),
                 Align2::CENTER_TOP,
                 title,
                 FontId::proportional(11.0),
-                if is_focus {
-                    Theme::TEXT_PRIMARY
-                } else {
-                    Theme::TEXT_MUTED
-                },
+                text_color,
             );
             let response = response.on_hover_text(format!(
                 "{}\n{}\n{} outgoing · {} incoming",
