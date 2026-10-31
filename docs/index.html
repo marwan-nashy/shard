@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shard — The Zero-Bloat, Local-First Knowledge Base for Potato PCs</title>
+  <meta name="description" content="A lightweight, high-performance, open-source alternative to Obsidian. No Electron. 100% plain Markdown. Under 35 MB idle RAM. Sub-50ms cold startup." />
+  <link rel="icon" type="image/svg+xml" href="assets/shard.svg" />
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            bg: {
+              main: '#0c0c10',
+              secondary: '#121218',
+              card: '#181822',
+              hover: '#222230',
+            },
+            accent: {
+              purple: '#7b6cd9',
+              purpleHover: '#9282fa',
+              blue: '#4a90e2',
+              emerald: '#56b075',
+              orange: '#e6963c',
+            },
+            text: {
+              primary: '#f3f4f6',
+              muted: '#9ca3af',
+              faint: '#6b7280',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0c0c10; }
+    ::-webkit-scrollbar-thumb { background: #222230; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #333348; }
+
+    .glow-purple {
+      box-shadow: 0 0 50px -10px rgba(123, 108, 217, 0.35);
+    }
+    .text-glow {
+      text-shadow: 0 0 30px rgba(123, 108, 217, 0.4);
+    }
+    .gradient-border {
+      background: linear-gradient(135deg, rgba(123, 108, 217, 0.4), rgba(74, 144, 226, 0.1), rgba(255, 255, 255, 0.05));
+    }
+    .bg-grid {
+      background-image: radial-gradient(circle, #222230 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+  </style>
+</head>
+
+<body class="bg-bg-main text-text-primary font-sans antialiased selection:bg-accent-purple/30 selection:text-white min-h-screen flex flex-col bg-grid">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-bg-main/80 border-b border-white/5 transition-all">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Logo & Brand -->
+      <a href="#" class="flex items-center gap-3 group">
+        <div class="w-8 h-8 rounded-lg bg-bg-card p-1 border border-accent-purple/40 shadow-[0_0_15px_rgba(123,108,217,0.3)] group-hover:scale-105 transition-transform">
+          <img src="assets/shard.svg" alt="Shard Logo" class="w-full h-full object-contain" />
+        </div>
+        <span class="text-xl font-bold tracking-tight text-white flex items-center gap-1.5">
+          Shard <span class="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/20 text-accent-purple font-mono font-medium border border-accent-purple/30">v0.1.0</span>
+        </span>
+      </a>
+
+      <!-- Desktop Nav Links -->
+      <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-text-muted">
+        <a href="#features" class="hover:text-white transition-colors">Features</a>
+        <a href="#benchmarks" class="hover:text-white transition-colors">Benchmarks</a>
+        <a href="#interactive" class="hover:text-white transition-colors">Interactive Demo</a>
+        <a href="#canvas" class="hover:text-white transition-colors">Visual Canvas</a>
+        <a href="#download" class="hover:text-white transition-colors">Download</a>
+      </nav>
+
+      <!-- Right Action CTAs -->
+      <div class="flex items-center gap-3">
+        <a href="https://github.com/marwan-nashy/shard" target="_blank" rel="noopener noreferrer" class="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-white bg-bg-card hover:bg-bg-hover border border-white/10 rounded-lg transition-colors">
+          <i data-lucide="github" class="w-4 h-4"></i>
+          <span>GitHub</span>
+        </a>
+        <a href="#download" class="flex items-center gap-2 px-4 py-1.5 text-xs font-semibold text-white bg-accent-purple hover:bg-accent-purpleHover rounded-lg shadow-[0_0_20px_rgba(123,108,217,0.4)] transition-all transform hover:-translate-y-0.5">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Download Free</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section class="relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden">
+    <!-- Ambient Radial Glows -->
+    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-accent-purple/20 blur-[130px] rounded-full pointer-events-none -z-10"></div>
+    <div class="absolute top-1/3 left-1/3 w-[300px] h-[300px] bg-accent-blue/15 blur-[120px] rounded-full pointer-events-none -z-10"></div>
+
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 text-center">
+      <!-- Release Announcement Pill -->
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-text-muted mb-8 hover:border-accent-purple/50 transition-colors cursor-pointer">
+        <span class="flex h-2 w-2 rounded-full bg-accent-emerald animate-pulse"></span>
+        <span class="font-medium text-text-primary">Shard v0.1.0 Released</span>
+        <span class="text-text-faint">•</span>
+        <span class="text-accent-purple font-mono">100% Free & Open Source (GPLv3)</span>
+      </div>
+
+      <!-- Main Headline -->
+      <h1 class="text-4xl sm:text-6xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.1] mb-6">
+        Your thoughts, <br class="hidden sm:inline" />
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-accent-purple via-[#9b8aff] to-accent-blue text-glow">
+          crystallized at zero lag.
+        </span>
+      </h1>
+
+      <!-- Subheadline -->
+      <p class="max-w-2xl mx-auto text-lg sm:text-xl text-text-muted mb-10 leading-relaxed font-normal">
+        An ultra-lightweight, zero-bloat, local-first Markdown knowledge base and visual canvas. Built in <strong>Rust</strong> and <strong>Tauri v2</strong> to run effortlessly on low-spec potato PCs.
+      </p>
+
+      <!-- Primary Download Buttons -->
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+        <a href="https://github.com/marwan-nashy/shard/releases/download/v0.1.0/Shard-Portable.exe" class="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 text-sm font-semibold text-white bg-accent-purple hover:bg-accent-purpleHover rounded-xl shadow-[0_0_30px_rgba(123,108,217,0.45)] hover:shadow-[0_0_40px_rgba(123,108,217,0.6)] transition-all transform hover:-translate-y-0.5">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Download Portable (.exe)</span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded bg-black/25 font-mono">4.5 MB</span>
+        </a>
+
+        <a href="https://github.com/marwan-nashy/shard/releases/download/v0.1.0/Shard-Setup.exe" class="w-full sm:w-auto flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-medium text-text-primary bg-bg-card hover:bg-bg-hover border border-white/10 hover:border-white/20 rounded-xl transition-all">
+          <i data-lucide="folder-down" class="w-4 h-4 text-accent-blue"></i>
+          <span>Windows Installer (.exe)</span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded bg-white/5 font-mono text-text-muted">1.6 MB</span>
+        </a>
+      </div>
+
+      <!-- Quick Requirements Badge -->
+      <div class="flex items-center justify-center gap-6 text-xs text-text-faint font-mono">
+        <span class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-accent-emerald"></i> Windows 10/11</span>
+        <span class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-accent-emerald"></i> &lt; 35 MB Idle RAM</span>
+        <span class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-accent-emerald"></i> Sub-50ms Cold Start</span>
+      </div>
+    </div>
+
+    <!-- HERO PRODUCT MOCKUP -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 mt-14">
+      <div class="relative rounded-2xl p-1 bg-gradient-to-b from-white/15 via-white/5 to-transparent shadow-2xl glow-purple">
+        <div class="rounded-xl overflow-hidden bg-bg-secondary border border-white/10 shadow-2xl">
+          <!-- Window Chrome Titlebar -->
+          <div class="h-10 bg-[#14141c] border-b border-white/5 px-4 flex items-center justify-between select-none">
+            <div class="flex items-center gap-2">
+              <div class="w-3 h-3 rounded-full bg-[#e05353]/80"></div>
+              <div class="w-3 h-3 rounded-full bg-[#e6963c]/80"></div>
+              <div class="w-3 h-3 rounded-full bg-[#56b075]/80"></div>
+            </div>
+            <div class="text-xs text-text-muted font-medium flex items-center gap-2">
+              <img src="assets/shard.svg" class="w-3.5 h-3.5" alt="Shard" />
+              <span>Shard — Welcome to Shard.md</span>
+            </div>
+            <div class="w-16"></div>
+          </div>
+
+          <!-- App Workspace Mockup (Ribbon + Sidebar + Editor) -->
+          <div class="flex h-[420px] sm:h-[480px] bg-bg-main overflow-hidden text-xs">
+            <!-- Left Ribbon -->
+            <div class="w-11 bg-[#121218] border-r border-white/5 flex flex-col items-center py-3 gap-3 shrink-0">
+              <div class="w-6 h-6 rounded bg-accent-purple/20 p-1 flex items-center justify-center text-accent-purple">
+                <img src="assets/shard.svg" class="w-full h-full" alt="Icon" />
+              </div>
+              <div class="p-1.5 rounded bg-bg-card text-accent-purple border-l-2 border-accent-purple"><i data-lucide="file-text" class="w-3.5 h-3.5"></i></div>
+              <div class="p-1.5 text-text-faint hover:text-white"><i data-lucide="search" class="w-3.5 h-3.5"></i></div>
+              <div class="p-1.5 text-text-faint hover:text-white"><i data-lucide="share-2" class="w-3.5 h-3.5"></i></div>
+              <div class="p-1.5 text-text-faint hover:text-white"><i data-lucide="layout-grid" class="w-3.5 h-3.5"></i></div>
+              <div class="p-1.5 text-text-faint hover:text-white"><i data-lucide="calendar" class="w-3.5 h-3.5"></i></div>
+            </div>
+
+            <!-- Left File Sidebar -->
+            <div class="hidden sm:flex w-52 bg-[#14141c] border-r border-white/5 flex-col shrink-0">
+              <div class="px-3 py-2 border-b border-white/5 flex items-center justify-between text-[11px] font-semibold text-text-faint uppercase tracking-wider">
+                <span>Files</span>
+                <div class="flex gap-1 text-text-muted">
+                  <i data-lucide="plus" class="w-3 h-3"></i>
+                  <i data-lucide="folder-plus" class="w-3 h-3"></i>
+                </div>
+              </div>
+              <div class="p-2 space-y-1">
+                <div class="flex items-center gap-1.5 px-2 py-1.5 rounded bg-bg-card text-white font-medium border-l-2 border-accent-purple">
+                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-accent-purple"></i>
+                  <span class="truncate">Welcome to Shard</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded text-text-muted hover:text-white">
+                  <i data-lucide="layout-grid" class="w-3.5 h-3.5 text-accent-purple"></i>
+                  <span class="truncate">Mindmap.canvas</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded text-text-muted hover:text-white">
+                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-text-faint"></i>
+                  <span class="truncate">Project Roadmap</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded text-text-muted hover:text-white">
+                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-text-faint"></i>
+                  <span class="truncate">Daily Log 2026-10-31</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Central Live Preview Editor -->
+            <div class="flex-1 flex flex-col min-w-0 bg-bg-main overflow-y-auto">
+              <!-- Tab Bar -->
+              <div class="h-9 bg-[#121218] border-b border-white/5 flex items-center px-2 gap-1 shrink-0">
+                <div class="flex items-center gap-2 px-3 h-8 bg-bg-main text-white font-medium rounded-t border-t border-x border-white/10 text-xs">
+                  <i data-lucide="file-text" class="w-3 h-3 text-accent-purple"></i>
+                  <span>Welcome to Shard</span>
+                </div>
+                <div class="flex items-center gap-2 px-3 h-8 bg-transparent text-text-faint hover:text-white text-xs">
+                  <i data-lucide="layout-grid" class="w-3 h-3 text-accent-purple"></i>
+                  <span>Mindmap.canvas</span>
+                </div>
+              </div>
+
+              <!-- Document Content (Interactive Checklist Demo) -->
+              <div class="p-6 sm:p-8 max-w-2xl mx-auto w-full space-y-4 font-sans text-sm leading-relaxed select-none">
+                <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                  Welcome to Shard 💎
+                </h1>
+                <p class="text-text-muted text-xs sm:text-sm">
+                  Shard is an ultra-fast, local-first knowledge base built on <strong>Tauri v2</strong> and <strong>Rust</strong>. It connects ideas with zero latency.
+                </p>
+
+                <!-- Callout Box -->
+                <div class="border-l-4 border-accent-purple bg-accent-purple/10 rounded-r-lg p-3 text-xs text-text-primary">
+                  <div class="font-semibold text-accent-purple mb-1 flex items-center gap-1.5">
+                    <i data-lucide="info" class="w-3.5 h-3.5"></i> NOTE
+                  </div>
+                  <div>All notes are stored directly as plain <code>.md</code> and <code>.canvas</code> files on your local drive. Zero cloud lock-in.</div>
+                </div>
+
+                <!-- Interactive Checklists -->
+                <div class="space-y-2 pt-2">
+                  <div class="text-xs font-semibold text-text-faint uppercase tracking-wider">Interactive Tasks (Click to test):</div>
+                  <label class="flex items-center gap-2.5 cursor-pointer text-text-primary hover:text-white">
+                    <input type="checkbox" checked class="w-4 h-4 rounded border-white/20 bg-bg-card accent-accent-purple cursor-pointer" />
+                    <span>Eliminate Electron runtime overhead (saves 500+ MB RAM)</span>
+                  </label>
+                  <label class="flex items-center gap-2.5 cursor-pointer text-text-primary hover:text-white">
+                    <input type="checkbox" checked class="w-4 h-4 rounded border-white/20 bg-bg-card accent-accent-purple cursor-pointer" />
+                    <span>Hardware-accelerated 2D graph view with idle CPU cutoff</span>
+                  </label>
+                  <label class="flex items-center gap-2.5 cursor-pointer text-text-primary hover:text-white">
+                    <input type="checkbox" class="w-4 h-4 rounded border-white/20 bg-bg-card accent-accent-purple cursor-pointer" />
+                    <span>Double-click to create cards on the infinite canvas</span>
+                  </label>
+                </div>
+
+                <!-- Code block with copy button -->
+                <div class="rounded-lg bg-[#141418] border border-white/10 overflow-hidden font-mono text-xs mt-3">
+                  <div class="h-6 bg-[#1a1a24] px-3 flex items-center justify-between text-[10px] text-text-faint">
+                    <span class="text-accent-purple">BASH</span>
+                    <span class="text-[10px] hover:text-white cursor-pointer" onclick="navigator.clipboard.writeText('git clone https://github.com/marwan-nashy/shard.git'); this.innerText='COPIED!'; setTimeout(() => this.innerText='COPY', 1500)">COPY</span>
+                  </div>
+                  <div class="p-3 text-accent-purple/90">
+                    git clone https://github.com/marwan-nashy/shard.git
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BENCHMARKS: SHARD VS OBSIDIAN -->
+  <section id="benchmarks" class="py-20 bg-bg-secondary/60 border-y border-white/5 relative">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="text-center mb-14">
+        <h2 class="text-xs font-mono uppercase tracking-widest text-accent-purple font-semibold mb-2">Performance Benchmarks</h2>
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Engineered for Potato PCs</h3>
+        <p class="text-text-muted mt-3 max-w-xl mx-auto text-sm sm:text-base">
+          Obsidian bundles a full Chromium browser and Node.js instance for every window. Shard uses the native OS web engine and a high-performance compiled Rust core.
+        </p>
+      </div>
+
+      <!-- Comparison Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- 1. Idle RAM -->
+        <div class="bg-bg-card border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-accent-purple/40 transition-colors">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs font-semibold text-text-faint uppercase font-mono">Idle RAM Usage</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent-emerald/20 text-accent-emerald font-mono">18x Lighter</span>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-bold text-white flex items-center gap-1.5"><img src="assets/shard.svg" class="w-3 h-3" /> Shard</span>
+                <span class="font-mono text-accent-emerald font-semibold">32 MB</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-white/5 overflow-hidden">
+                <div class="h-full bg-accent-emerald rounded-full" style="width: 6%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-text-muted">Obsidian</span>
+                <span class="font-mono text-text-muted">620+ MB</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-white/5 overflow-hidden">
+                <div class="h-full bg-accent-orange/70 rounded-full" style="width: 95%"></div>
+              </div>
+            </div>
+          </div>
+          <p class="text-[11px] text-text-faint mt-4">Shard frees up precious memory on dual-core laptops and 4GB RAM machines.</p>
+        </div>
+
+        <!-- 2. Cold Startup -->
+        <div class="bg-bg-card border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-accent-purple/40 transition-colors">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs font-semibold text-text-faint uppercase font-mono">Cold Launch Time</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent-emerald/20 text-accent-emerald font-mono">60x Faster</span>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-bold text-white flex items-center gap-1.5"><img src="assets/shard.svg" class="w-3 h-3" /> Shard</span>
+                <span class="font-mono text-accent-emerald font-semibold">&lt; 40 ms</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-white/5 overflow-hidden">
+                <div class="h-full bg-accent-emerald rounded-full" style="width: 4%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-text-muted">Obsidian</span>
+                <span class="font-mono text-text-muted">2,450 ms</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-white/5 overflow-hidden">
+                <div class="h-full bg-accent-orange/70 rounded-full" style="width: 88%"></div>
+              </div>
+            </div>
+          </div>
+          <p class="text-[11px] text-text-faint mt-4">Instant startup without splash screens, plugin load delays, or electron spin-up.</p>
+        </div>
+
+        <!-- 3. Executable Size -->
+        <div class="bg-bg-card border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-accent-purple/40 transition-colors">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs font-semibold text-text-faint uppercase font-mono">Application Size</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent-emerald/20 text-accent-emerald font-mono">60x Smaller</span>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-bold text-white flex items-center gap-1.5"><img src="assets/shard.svg" class="w-3 h-3" /> Shard</span>
+                <span class="font-mono text-accent-emerald font-semibold">4.7 MB</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-white/5 overflow-hidden">
+                <div class="h-full bg-accent-emerald rounded-full" style="width: 5%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-text-muted">Obsidian</span>
+                <span class="font-mono text-text-muted">280+ MB</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-white/5 overflow-hidden">
+                <div class="h-full bg-accent-orange/70 rounded-full" style="width: 92%"></div>
+              </div>
+            </div>
+          </div>
+          <p class="text-[11px] text-text-faint mt-4">Download in seconds even on slow mobile connections. Fits on any USB drive.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CORE FEATURES GRID -->
+  <section id="features" class="py-24 max-w-6xl mx-auto px-4 sm:px-6">
+    <div class="text-center mb-16">
+      <h2 class="text-xs font-mono uppercase tracking-widest text-accent-purple font-semibold mb-2">Capabilities</h2>
+      <h3 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Everything You Love About Personal Knowledge Bases</h3>
+      <p class="text-text-muted mt-3 max-w-xl mx-auto text-sm sm:text-base">
+        Crafted without compromises. Full parity with your markdown workflow.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- 1. CodeMirror 6 Live Preview -->
+      <div class="bg-bg-card/70 border border-white/5 rounded-2xl p-6 hover:border-accent-purple/40 transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-accent-purple/15 text-accent-purple flex items-center justify-center mb-5">
+          <i data-lucide="edit-3" class="w-5 h-5"></i>
+        </div>
+        <h4 class="text-base font-semibold text-white mb-2">CodeMirror 6 Live Preview</h4>
+        <p class="text-xs text-text-muted leading-relaxed">
+          WYSIWYG markdown parsing rendered incrementally. Headers, bold, italics, strikethrough, callout blocks, math ($math$), and interactive checklists.
+        </p>
+      </div>
+
+      <!-- 2. Bidirectional Wikilinks -->
+      <div class="bg-bg-card/70 border border-white/5 rounded-2xl p-6 hover:border-accent-purple/40 transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-accent-blue/15 text-accent-blue flex items-center justify-center mb-5">
+          <i data-lucide="link-2" class="w-5 h-5"></i>
+        </div>
+        <h4 class="text-base font-semibold text-white mb-2">Wikilinks & Atomic Refactoring</h4>
+        <p class="text-xs text-text-muted leading-relaxed">
+          Type <code>[[</code> for zero-latency fuzzy title suggestions. Renaming a note atomically updates every reference across your entire vault in native Rust.
+        </p>
+      </div>
+
+      <!-- 3. Hardware-Accelerated 2D Graph -->
+      <div class="bg-bg-card/70 border border-white/5 rounded-2xl p-6 hover:border-accent-purple/40 transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-accent-emerald/15 text-accent-emerald flex items-center justify-center mb-5">
+          <i data-lucide="share-2" class="w-5 h-5"></i>
+        </div>
+        <h4 class="text-base font-semibold text-white mb-2">2D Graph with 0% Idle CPU</h4>
+        <p class="text-xs text-text-muted leading-relaxed">
+          Force-directed canvas physics with spatial partitioning. Once nodes reach equilibrium, simulation loops automatically halt so your CPU stays at 0%.
+        </p>
+      </div>
+
+      <!-- 4. Visual Canvas Whiteboard -->
+      <div class="bg-bg-card/70 border border-white/5 rounded-2xl p-6 hover:border-accent-purple/40 transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-[#a855f7]/15 text-[#a855f7] flex items-center justify-center mb-5">
+          <i data-lucide="layout-grid" class="w-5 h-5"></i>
+        </div>
+        <h4 class="text-base font-semibold text-white mb-2">Infinite Visual Canvas</h4>
+        <p class="text-xs text-text-muted leading-relaxed">
+          An infinite 2D canvas for cards, notes, and ideas. Drag connection handles to route Bezier arrows. Fully compatible with Obsidian <code>.canvas</code> format.
+        </p>
+      </div>
+
+      <!-- 5. Sub-5ms Quick Switcher -->
+      <div class="bg-bg-card/70 border border-white/5 rounded-2xl p-6 hover:border-accent-purple/40 transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-accent-orange/15 text-accent-orange flex items-center justify-center mb-5">
+          <i data-lucide="command" class="w-5 h-5"></i>
+        </div>
+        <h4 class="text-base font-semibold text-white mb-2">Instant Quick Switcher</h4>
+        <p class="text-xs text-text-muted leading-relaxed">
+          Zero-latency fuzzy search across note titles and content with <code>Ctrl+O</code>. Press <code>Ctrl+P</code> to execute commands, open daily notes, or toggle views.
+        </p>
+      </div>
+
+      <!-- 6. 100% Local-First & GPLv3 -->
+      <div class="bg-bg-card/70 border border-white/5 rounded-2xl p-6 hover:border-accent-purple/40 transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-white/10 text-white flex items-center justify-center mb-5">
+          <i data-lucide="shield-check" class="w-5 h-5"></i>
+        </div>
+        <h4 class="text-base font-semibold text-white mb-2">100% Local & Freedom Protected</h4>
+        <p class="text-xs text-text-muted leading-relaxed">
+          Zero cloud servers, telemetry, or tracking. Licensed under GPLv3, ensuring Shard and all future forks remain free, public, and open-source forever.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERACTIVE PLAYGROUND DEMO -->
+  <section id="interactive" class="py-20 bg-bg-secondary/40 border-t border-white/5">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="text-center mb-10">
+        <h2 class="text-xs font-mono uppercase tracking-widest text-accent-purple font-semibold mb-2">Interactive Showcase</h2>
+        <h3 class="text-3xl font-extrabold text-white tracking-tight">Test the 2D Graph Physics</h3>
+        <p class="text-text-muted text-xs sm:text-sm mt-2">
+          Drag the nodes below! This is a live simulation of Shard's equilibrium force-directed graph view running in your browser:
+        </p>
+      </div>
+
+      <!-- Live Interactive Canvas Sandbox -->
+      <div class="rounded-2xl border border-white/10 bg-[#121218] overflow-hidden shadow-2xl relative">
+        <div class="h-10 bg-[#161622] border-b border-white/5 px-4 flex items-center justify-between text-xs text-text-muted">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-accent-purple animate-pulse"></span>
+            <span class="font-medium text-white">Live Graph Simulation</span>
+          </div>
+          <div class="text-[11px] font-mono text-text-faint">Drag any node • Pan & zoom</div>
+        </div>
+        <canvas id="demoCanvas" width="900" height="380" class="w-full h-[380px] bg-[#0e0e14] cursor-grab active:cursor-grabbing"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD SECTION -->
+  <section id="download" class="py-24 max-w-5xl mx-auto px-4 sm:px-6 text-center">
+    <div class="w-14 h-14 rounded-2xl bg-accent-purple/20 p-2.5 border border-accent-purple/40 mx-auto mb-6 shadow-[0_0_30px_rgba(123,108,217,0.3)]">
+      <img src="assets/shard.svg" class="w-full h-full object-contain" alt="Shard" />
+    </div>
+
+    <h2 class="text-3xl sm:text-5xl font-extrabold text-white tracking-tight mb-4">
+      Ready to write at the speed of thought?
+    </h2>
+    <p class="text-text-muted max-w-lg mx-auto text-sm sm:text-base mb-12">
+      Free forever. No account, no cloud telemetry, no credit card.
+    </p>
+
+    <!-- Download Options Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+      <!-- 1. Portable -->
+      <div class="bg-bg-card border-2 border-accent-purple/40 rounded-2xl p-6 relative flex flex-col justify-between shadow-[0_0_30px_rgba(123,108,217,0.2)]">
+        <div>
+          <div class="inline-block px-2.5 py-0.5 rounded-full bg-accent-purple/20 text-accent-purple text-[10px] font-mono font-semibold uppercase mb-3">
+            Recommended
+          </div>
+          <h3 class="text-lg font-bold text-white mb-1">Standalone Portable</h3>
+          <p class="text-xs text-text-muted mb-4">
+            Zero installation required. Single <code>.exe</code> file that runs immediately from any folder or USB drive.
+          </p>
+        </div>
+        <div>
+          <a href="https://github.com/marwan-nashy/shard/releases/download/v0.1.0/Shard-Portable.exe" class="w-full py-2.5 px-4 rounded-xl bg-accent-purple hover:bg-accent-purpleHover text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Download Portable (4.5 MB)</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 2. Installer -->
+      <div class="bg-bg-card border border-white/10 rounded-2xl p-6 relative flex flex-col justify-between hover:border-white/20 transition-colors">
+        <div>
+          <div class="inline-block px-2.5 py-0.5 rounded-full bg-white/10 text-text-muted text-[10px] font-mono font-semibold uppercase mb-3">
+            Standard Setup
+          </div>
+          <h3 class="text-lg font-bold text-white mb-1">Windows Installer</h3>
+          <p class="text-xs text-text-muted mb-4">
+            1-Click NSIS installer that creates Start Menu and Desktop shortcuts with clean uninstaller support.
+          </p>
+        </div>
+        <div>
+          <a href="https://github.com/marwan-nashy/shard/releases/download/v0.1.0/Shard-Setup.exe" class="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
+            <i data-lucide="folder-down" class="w-4 h-4 text-accent-blue"></i>
+            <span>Download Setup (1.6 MB)</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 3. Enterprise MSI -->
+      <div class="bg-bg-card border border-white/10 rounded-2xl p-6 relative flex flex-col justify-between hover:border-white/20 transition-colors">
+        <div>
+          <div class="inline-block px-2.5 py-0.5 rounded-full bg-white/10 text-text-muted text-[10px] font-mono font-semibold uppercase mb-3">
+            Enterprise
+          </div>
+          <h3 class="text-lg font-bold text-white mb-1">Windows MSI Package</h3>
+          <p class="text-xs text-text-muted mb-4">
+            Standard Windows Installer (MSI) for system administrators, automated deployment, and IT environments.
+          </p>
+        </div>
+        <div>
+          <a href="https://github.com/marwan-nashy/shard/releases/download/v0.1.0/Shard-Setup.msi" class="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
+            <i data-lucide="package" class="w-4 h-4 text-accent-emerald"></i>
+            <span>Download MSI (2.3 MB)</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="mt-auto border-t border-white/5 bg-[#0a0a0e] py-12 text-xs text-text-faint">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <img src="assets/shard.svg" class="w-5 h-5 opacity-80" alt="Shard" />
+        <span class="font-medium text-text-muted">Shard &copy; 2026 Marwan</span>
+        <span>•</span>
+        <a href="https://github.com/marwan-nashy/shard/blob/main/LICENSE" class="hover:text-accent-purple underline">GNU General Public License v3.0</a>
+      </div>
+
+      <div class="flex items-center gap-6">
+        <a href="https://github.com/marwan-nashy/shard" class="hover:text-white transition-colors flex items-center gap-1.5">
+          <i data-lucide="github" class="w-4 h-4"></i>
+          <span>GitHub Repository</span>
+        </a>
+        <a href="https://github.com/marwan-nashy/shard/releases" class="hover:text-white transition-colors">All Releases</a>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pt-6 border-t border-white/5 text-[11px] text-text-faint/70 text-center sm:text-left">
+      Legal Disclaimer: Shard is an independent, community-driven open-source project. It is not affiliated with, associated with, sponsored by, or endorsed by Dynalist Inc. or Obsidian. All product names, logos, and brands are property of their respective owners.
+    </div>
+  </footer>
+
+  <!-- Interactive 2D Graph View Script for Landing Page -->
+  <script>
+    lucide.createIcons();
+
+    // Interactive Demo Graph Simulation
+    const canvas = document.getElementById('demoCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      const nodes = [
+        { id: 1, label: 'Shard Core', x: 450, y: 190, r: 18, color: '#7b6cd9', vx: 0, vy: 0 },
+        { id: 2, label: 'Live Preview', x: 300, y: 120, r: 12, color: '#9382ff', vx: 0, vy: 0 },
+        { id: 3, label: '2D Graph', x: 600, y: 130, r: 13, color: '#56b075', vx: 0, vy: 0 },
+        { id: 4, label: 'Visual Canvas', x: 450, y: 300, r: 14, color: '#a855f7', vx: 0, vy: 0 },
+        { id: 5, label: 'Fuzzy Search', x: 260, y: 260, r: 11, color: '#e6963c', vx: 0, vy: 0 },
+        { id: 6, label: 'Wikilinks [[ ]]', x: 640, y: 250, r: 12, color: '#4a90e2', vx: 0, vy: 0 },
+        { id: 7, label: 'Tauri v2', x: 370, y: 80, r: 10, color: '#9382ff', vx: 0, vy: 0 },
+        { id: 8, label: 'Potato PCs', x: 530, y: 80, r: 10, color: '#56b075', vx: 0, vy: 0 },
+      ];
+
+      const links = [
+        { source: 1, target: 2 },
+        { source: 1, target: 3 },
+        { source: 1, target: 4 },
+        { source: 1, target: 5 },
+        { source: 1, target: 6 },
+        { source: 2, target: 7 },
+        { source: 3, target: 8 },
+        { source: 5, target: 2 },
+        { source: 4, target: 6 },
+      ];
+
+      let draggedNode = null;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      function update() {
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+
+        // Spring forces between connected nodes
+        links.forEach(l => {
+          const s = nodes.find(n => n.id === l.source);
+          const t = nodes.find(n => n.id === l.target);
+          if (!s || !t) return;
+
+          const dx = t.x - s.x;
+          const dy = t.y - s.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const targetDist = 110;
+          const force = (dist - targetDist) * 0.015;
+
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+
+          if (s !== draggedNode) { s.vx += fx; s.vy += fy; }
+          if (t !== draggedNode) { t.vx -= fx; t.vy -= fy; }
+        });
+
+        // Repulsion forces
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i];
+            const b = nodes[j];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            if (dist < 180) {
+              const rep = (180 - dist) / dist * 0.4;
+              const rx = dx * rep;
+              const ry = dy * rep;
+              if (a !== draggedNode) { a.vx -= rx; a.vy -= ry; }
+              if (b !== draggedNode) { b.vx += rx; b.vy += ry; }
+            }
+          }
+        }
+
+        // Center gravity and velocity damping
+        nodes.forEach(n => {
+          if (n !== draggedNode) {
+            n.vx += (width / 2 - n.x) * 0.003;
+            n.vy += (height / 2 - n.y) * 0.003;
+            n.vx *= 0.88;
+            n.vy *= 0.88;
+            n.x += n.vx;
+            n.y += n.vy;
+          }
+        });
+      }
+
+      function draw() {
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        // Draw connections
+        links.forEach(l => {
+          const s = nodes.find(n => n.id === l.source);
+          const t = nodes.find(n => n.id === l.target);
+          if (!s || !t) return;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(t.x, t.y);
+          ctx.strokeStyle = 'rgba(123, 108, 217, 0.25)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        });
+
+        // Draw nodes
+        nodes.forEach(n => {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+          ctx.fillStyle = n.color;
+          ctx.shadowColor = n.color;
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          // Border ring
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          // Label
+          ctx.font = '10px Inter, sans-serif';
+          ctx.fillStyle = '#dcddde';
+          ctx.textAlign = 'center';
+          ctx.fillText(n.label, n.x, n.y + n.r + 14);
+        });
+      }
+
+      function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+      }
+      loop();
+
+      canvas.addEventListener('mousedown', e => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        for (const n of nodes) {
+          const dx = mx - n.x;
+          const dy = my - n.y;
+          if (Math.sqrt(dx * dx + dy * dy) < n.r + 6) {
+            draggedNode = n;
+            break;
+          }
+        }
+      });
+
+      window.addEventListener('mousemove', e => {
+        if (!draggedNode) return;
+        const rect = canvas.getBoundingClientRect();
+        draggedNode.x = e.clientX - rect.left;
+        draggedNode.y = e.clientY - rect.top;
+        draggedNode.vx = 0;
+        draggedNode.vy = 0;
+      });
+
+      window.addEventListener('mouseup', () => {
+        draggedNode = null;
+      });
+    }
+  </script>
+</body>
+</html>
