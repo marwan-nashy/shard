@@ -1,6 +1,7 @@
 {
   "name": "shard",
   "productName": "Shard",
+  "description": "An ultra-lightweight, zero-bloat, local-first Markdown knowledge base and visual canvas built with Rust and Tauri v2.",
   "private": true,
   "version": "0.1.0",
   "type": "module",

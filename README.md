@@ -1,6 +1,15 @@
 # Shard
 
-A lightweight, zero-bloat, open-source local knowledge base and markdown editor designed to run effortlessly on low-spec "potato PCs" (low RAM, integrated Intel GPUs, dual-core CPUs) without Electron runtime overhead.
+> **An ultra-lightweight, zero-bloat, local-first Markdown knowledge base and visual canvas built with Rust and Tauri v2.**
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-informational.svg)]()
+[![Rust](https://img.shields.io/badge/Rust-1.80+-orange.svg)]()
+[![Tauri](https://img.shields.io/badge/Tauri-v2-purple.svg)]()
+
+Shard is a high-performance, open-source personal knowledge base designed to run effortlessly on low-spec "potato PCs" (low RAM, integrated Intel GPUs, dual-core CPUs) without Electron runtime overhead. It provides a full-featured markdown knowledge management experience with live preview editing, bidirectional linking, hardware-accelerated 2D graph view, and infinite whiteboard canvas while maintaining an idle footprint under 35 MB of RAM and cold startup under 50ms.
+
+---
 
 ## Architectural Core Principles
 1. **Zero Electron Bloat**: Avoids bundling full Chromium + Node.js runtimes. Built on **Tauri v2 (Rust backend)** + **OS Evergreen WebView2** (~30–35 MB idle RAM vs. Obsidian's 400 MB–900 MB).

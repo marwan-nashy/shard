@@ -1,8 +1,8 @@
 [package]
 name = "shard"
 version = "0.1.0"
-description = "Shard Desktop App"
-authors = ["Shard Contributors"]
+description = "An ultra-lightweight, zero-bloat, local-first Markdown knowledge base and visual canvas built with Rust and Tauri v2."
+authors = ["Marwan"]
 edition = "2021"
 
 [lib]
