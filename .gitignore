@@ -1,6 +1,16 @@
 /target/
+/src-tauri/target/
 /dist/
+/dist-ssr/
+node_modules/
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
 /.codex-background/
 /.agents/
 /skills-lock.json
-*.log
+/release/
+Shard.exe
+Better Obsidian.exe

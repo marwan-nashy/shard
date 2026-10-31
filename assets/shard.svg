@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background squircle gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181820" />
+      <stop offset="100%" stop-color="#0e0e12" />
+    </linearGradient>
+
+    <!-- Outer Glow -->
+    <filter id="shardGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Facet Gradients -->
+    <!-- Top-Left Facet -->
+    <linearGradient id="facetTL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c4b5fd" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+
+    <!-- Top-Right Facet -->
+    <linearGradient id="facetTR" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+
+    <!-- Mid-Left Center Ridge -->
+    <linearGradient id="facetML" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+
+    <!-- Mid-Right Deep Facet -->
+    <linearGradient id="facetMR" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#4338ca" />
+    </linearGradient>
+
+    <!-- Bottom Taper Left -->
+    <linearGradient id="facetBL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#4f46e5" />
+    </linearGradient>
+
+    <!-- Bottom Taper Right -->
+    <linearGradient id="facetBR" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4338ca" />
+      <stop offset="100%" stop-color="#312e81" />
+    </linearGradient>
+
+    <!-- Crown Light -->
+    <linearGradient id="facetCrown" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#c4b5fd" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sleek rounded squircle base -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bgGrad)" stroke="#2d2b38" stroke-width="4" />
+
+  <!-- Ambient Shard Glow Silhouette -->
+  <path d="M 256 68 L 368 184 L 336 348 L 256 444 L 176 348 L 144 184 Z"
+        fill="#8b5cf6" opacity="0.35" filter="url(#shardGlow)" />
+
+  <!-- Faceted Crystal Geometry -->
+  <g stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.35" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Top-Left facet -->
+    <polygon points="256,68 144,184 220,224 256,150" fill="url(#facetTL)" />
+
+    <!-- Top-Right facet -->
+    <polygon points="256,68 256,150 292,224 368,184" fill="url(#facetTR)" />
+
+    <!-- Upper Crown Cap -->
+    <polygon points="256,68 220,135 256,150 292,135" fill="url(#facetCrown)" opacity="0.95" />
+
+    <!-- Center Left Core Facet -->
+    <polygon points="256,150 220,224 256,312" fill="url(#facetML)" />
+
+    <!-- Center Right Core Facet -->
+    <polygon points="256,150 256,312 292,224" fill="url(#facetMR)" />
+
+    <!-- Mid-Outer Left Wing -->
+    <polygon points="144,184 176,348 220,312 220,224" fill="#7c3aed" opacity="0.85" />
+
+    <!-- Mid-Outer Right Wing -->
+    <polygon points="368,184 292,224 292,312 336,348" fill="#3730a3" opacity="0.9" />
+
+    <!-- Lower Shard Spine (Left) -->
+    <polygon points="220,312 176,348 256,444 256,360" fill="url(#facetBL)" />
+
+    <!-- Lower Shard Spine (Right) -->
+    <polygon points="292,312 256,360 256,444 336,348" fill="url(#facetBR)" />
+
+    <!-- Diamond Center Core Light -->
+    <polygon points="256,220 236,260 256,300 276,260" fill="#ede9fe" opacity="0.6" />
+  </g>
+
+  <!-- Sharp Specular Highlight Lines -->
+  <line x1="256" y1="68" x2="256" y2="444" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" />
+  <line x1="144" y1="184" x2="256" y2="150" stroke="#ffffff" stroke-width="2" stroke-opacity="0.7" />
+  <line x1="256" y1="150" x2="368" y2="184" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.5" />
+
+  <!-- Gleam / Sparkle Star at Top Vertex -->
+  <circle cx="256" cy="68" r="4.5" fill="#ffffff" />
+  <circle cx="256" cy="68" r="9" fill="#ffffff" opacity="0.4" />
+</svg>
