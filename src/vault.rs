@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
@@ -8,6 +9,20 @@ pub struct NoteItem {
     pub rel_path: String,
     pub abs_path: PathBuf,
     pub title: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CanvasItem {
+    pub rel_path: String,
+    pub abs_path: PathBuf,
+    pub title: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemplateItem {
+    pub name: String,
+    pub rel_path: String,
+    pub abs_path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +43,7 @@ impl ActiveNote {
 pub struct Vault {
     pub root_path: PathBuf,
     pub notes: Vec<NoteItem>,
+    pub canvases: Vec<CanvasItem>,
 }
 
 impl Vault {
@@ -44,6 +60,7 @@ impl Vault {
         let mut vault = Self {
             root_path,
             notes: Vec::new(),
+            canvases: Vec::new(),
         };
         vault.refresh_notes()?;
         Ok(vault)
@@ -52,6 +69,7 @@ impl Vault {
     /// Scans the vault directory for markdown files without loading note bodies into memory.
     pub fn refresh_notes(&mut self) -> io::Result<()> {
         let mut notes = Vec::new();
+        let mut canvases = Vec::new();
 
         for entry in WalkDir::new(&self.root_path)
             .into_iter()
@@ -65,7 +83,21 @@ impl Vault {
             if entry.file_type().is_file() {
                 let path = entry.path();
                 if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                    if ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown") {
+                    if ext.eq_ignore_ascii_case("canvas") {
+                        if let Ok(rel) = path.strip_prefix(&self.root_path) {
+                            let rel_path = rel.to_string_lossy().replace('\\', "/");
+                            canvases.push(CanvasItem {
+                                rel_path,
+                                abs_path: path.to_path_buf(),
+                                title: path
+                                    .file_stem()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .into_owned(),
+                            });
+                        }
+                    } else if ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown")
+                    {
                         if let Ok(rel) = path.strip_prefix(&self.root_path) {
                             let rel_str = rel.to_string_lossy().replace('\\', "/");
                             let title = path
@@ -85,8 +117,39 @@ impl Vault {
         }
 
         notes.sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
+        canvases.sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
         self.notes = notes;
+        self.canvases = canvases;
         Ok(())
+    }
+
+    pub fn create_canvas(&mut self, title: &str) -> io::Result<CanvasItem> {
+        let mut name = title.trim().trim_end_matches(".canvas").to_string();
+        if name.is_empty() || name.contains(['/', '\\']) || name == "." || name == ".." {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Choose a simple canvas name.",
+            ));
+        }
+        let mut path = self.root_path.join(format!("{name}.canvas"));
+        let mut suffix = 2;
+        while path.exists() {
+            name = format!("{} ({suffix})", title.trim().trim_end_matches(".canvas"));
+            path = self.root_path.join(format!("{name}.canvas"));
+            suffix += 1;
+        }
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        serde_json::to_writer_pretty(file, &serde_json::json!({"nodes": [], "edges": []}))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        self.refresh_notes()?;
+        Ok(CanvasItem {
+            rel_path: format!("{name}.canvas"),
+            abs_path: path,
+            title: name,
+        })
     }
 
     /// Read note content on-demand
@@ -203,6 +266,301 @@ impl Vault {
         })
     }
 
+    pub fn rename_note(
+        &mut self,
+        source: &Path,
+        new_name: &str,
+        skip_link_rewrite: &HashSet<PathBuf>,
+    ) -> io::Result<(NoteItem, Vec<PathBuf>)> {
+        let source_relative = source
+            .strip_prefix(&self.root_path)
+            .map_err(|_| invalid_note_path("The note is outside the open vault."))?;
+        if source_relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+        {
+            return Err(invalid_note_path("The note path is not a safe vault path."));
+        }
+        let source_metadata = fs::symlink_metadata(source)?;
+        if source_metadata.file_type().is_symlink() || !source_metadata.is_file() {
+            return Err(invalid_note_path(
+                "Only regular Markdown notes can be renamed.",
+            ));
+        }
+        let source_parent = source
+            .parent()
+            .ok_or_else(|| invalid_note_path("The note has no parent directory."))?;
+        if !fs::canonicalize(source_parent)?.starts_with(&self.root_path) {
+            return Err(invalid_note_path(
+                "The note parent resolves outside the vault.",
+            ));
+        }
+        let relative_target = normalize_note_name(new_name)?;
+        let target = create_safe_parent_path(&self.root_path, &relative_target)?;
+        if source
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&target.to_string_lossy())
+        {
+            let existing = self
+                .notes
+                .iter()
+                .find(|note| note.abs_path == source)
+                .cloned()
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::NotFound, "Note not found in vault.")
+                })?;
+            return Ok((existing, Vec::new()));
+        }
+        if target.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "A note already exists at that path.",
+            ));
+        }
+
+        let old_note = self
+            .notes
+            .iter()
+            .find(|note| note.abs_path == source)
+            .cloned()
+            .unwrap_or_else(|| {
+                let rel_path = source_relative.to_string_lossy().replace('\\', "/");
+                NoteItem {
+                    title: source
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    rel_path,
+                    abs_path: source.to_path_buf(),
+                }
+            });
+        let target_rel = target
+            .strip_prefix(&self.root_path)
+            .map_err(|_| invalid_note_path("The new note path is outside the vault."))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let new_note = NoteItem {
+            title: target
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+            rel_path: target_rel,
+            abs_path: target.clone(),
+        };
+        let source_content = fs::read_to_string(source)?;
+        let renamed_content =
+            crate::wikilinks::rewrite_wikilinks(&source_content, &old_note, &new_note);
+
+        let mut changes: Vec<(PathBuf, String, String)> = Vec::new();
+        let mut changed_paths = Vec::new();
+        for note in &self.notes {
+            if note.abs_path == source {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(&note.abs_path)?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(invalid_note_path(
+                    "A vault note is no longer a regular file.",
+                ));
+            }
+            let canonical = fs::canonicalize(&note.abs_path)?;
+            if !canonical.starts_with(&self.root_path) {
+                return Err(invalid_note_path(
+                    "A vault note resolves outside the open vault.",
+                ));
+            }
+            let original = fs::read_to_string(&canonical)?;
+            let rewritten = crate::wikilinks::rewrite_wikilinks(&original, &old_note, &new_note);
+            if rewritten != original {
+                changed_paths.push(note.abs_path.clone());
+                if !skip_link_rewrite.contains(&note.abs_path) {
+                    changes.push((canonical, original, rewritten));
+                }
+            }
+        }
+
+        let mut committed = Vec::new();
+        for (path, original, rewritten) in &changes {
+            match fs::read_to_string(path) {
+                Ok(current) if current == *original => {}
+                Ok(_) => {
+                    rollback_rewrites(&committed);
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "{} changed during rename; reopen it and try again.",
+                            path.display()
+                        ),
+                    ));
+                }
+                Err(error) => {
+                    rollback_rewrites(&committed);
+                    return Err(error);
+                }
+            }
+            if let Err(error) = replace_file_contents_atomic(path, rewritten.as_bytes()) {
+                rollback_rewrites(&committed);
+                return Err(error);
+            }
+            committed.push((path.clone(), original.clone()));
+        }
+
+        let create_result = (|| {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)?;
+            if let Err(error) = file.write_all(renamed_content.as_bytes()) {
+                drop(file);
+                let _ = fs::remove_file(&target);
+                return Err(error);
+            }
+            drop(file);
+            fs::remove_file(source)
+        })();
+        if let Err(error) = create_result {
+            let _ = fs::remove_file(&target);
+            rollback_rewrites(&committed);
+            return Err(error);
+        }
+
+        self.notes.retain(|note| note.abs_path != source);
+        self.notes.push(new_note.clone());
+        self.notes
+            .sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
+        Ok((new_note, changed_paths))
+    }
+
+    /// Deletes a file (note or canvas) safely from the vault.
+    pub fn delete_file(&mut self, path: &Path) -> io::Result<()> {
+        let relative = path
+            .strip_prefix(&self.root_path)
+            .map_err(|_| invalid_note_path("The file is outside the open vault."))?;
+        if relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+        {
+            return Err(invalid_note_path("The file path is not a safe vault path."));
+        }
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(invalid_note_path("Only regular vault files can be deleted."));
+        }
+        let parent = path
+            .parent()
+            .ok_or_else(|| invalid_note_path("The file has no parent directory."))?;
+        if !fs::canonicalize(parent)?.starts_with(&self.root_path) {
+            return Err(invalid_note_path("The file parent resolves outside the vault."));
+        }
+
+        fs::remove_file(path)?;
+        self.refresh_notes()?;
+        Ok(())
+    }
+
+    pub fn daily_note_template(&self) -> Option<String> {
+        let template_path = self.root_path.join("Templates").join("Daily.md");
+        self.read_template(&template_path).ok()
+    }
+
+    /// Read template content safely. Rejects symlinks, non-files, and paths outside vault.
+    pub fn read_template(&self, abs_path: &Path) -> io::Result<String> {
+        let metadata = fs::symlink_metadata(abs_path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(invalid_note_path(
+                "The template is not a regular file inside the vault.",
+            ));
+        }
+        let canonical = fs::canonicalize(abs_path)?;
+        if !canonical.starts_with(&self.root_path) {
+            return Err(invalid_note_path(
+                "The template resolves outside the open vault.",
+            ));
+        }
+        fs::read_to_string(canonical)
+    }
+
+    /// Discovers regular Markdown files under the vault's Templates folder (including subfolders).
+    /// Does not follow symbolic links.
+    pub fn list_templates(&self) -> Vec<TemplateItem> {
+        let templates_dir = if self.root_path.join("Templates").is_dir() {
+            self.root_path.join("Templates")
+        } else if self.root_path.join("templates").is_dir() {
+            self.root_path.join("templates")
+        } else {
+            return Vec::new();
+        };
+
+        let metadata = match fs::symlink_metadata(&templates_dir) {
+            Ok(m) => m,
+            Err(_) => return Vec::new(),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Vec::new();
+        }
+
+        let canonical_templates = match fs::canonicalize(&templates_dir) {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
+        if !canonical_templates.starts_with(&self.root_path) {
+            return Vec::new();
+        }
+
+        let mut templates = Vec::new();
+        for entry in WalkDir::new(&canonical_templates)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| !is_hidden_or_ignored(e))
+        {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let path = entry.path();
+            let metadata = match fs::symlink_metadata(path) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                continue;
+            }
+            let Some(ext) = path.extension().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if !ext.eq_ignore_ascii_case("md") && !ext.eq_ignore_ascii_case("markdown") {
+                continue;
+            }
+            let Ok(canonical) = fs::canonicalize(path) else {
+                continue;
+            };
+            if !canonical.starts_with(&self.root_path)
+                || !canonical.starts_with(&canonical_templates)
+            {
+                continue;
+            }
+            let Ok(rel) = canonical.strip_prefix(&canonical_templates) else {
+                continue;
+            };
+            let rel_str = rel.to_string_lossy().replace('\\', "/");
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| rel_str.clone());
+
+            templates.push(TemplateItem {
+                name,
+                rel_path: rel_str,
+                abs_path: canonical,
+            });
+        }
+
+        templates.sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
+        templates
+    }
+
     /// Finds a unique "Untitled" name that does not exist
     pub fn find_available_untitled_name(&self) -> String {
         let base = "Untitled";
@@ -224,6 +582,42 @@ impl Vault {
 
 fn invalid_note_path(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
+}
+
+fn replace_file_contents_atomic(path: &Path, content: &[u8]) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| invalid_note_path("File has no parent directory."))?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+    let temp = parent.join(format!(
+        ".{file_name}.better-obsidian-{}-{stamp}.tmp",
+        std::process::id()
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
+    if let Err(error) = file.write_all(content) {
+        drop(file);
+        let _ = fs::remove_file(&temp);
+        return Err(error);
+    }
+    drop(file);
+    if let Err(error) = fs::rename(&temp, path) {
+        let _ = fs::remove_file(&temp);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn rollback_rewrites(committed: &[(PathBuf, String)]) {
+    for (path, original) in committed.iter().rev() {
+        let _ = replace_file_contents_atomic(path, original.as_bytes());
+    }
 }
 
 fn normalize_note_name(filename: &str) -> io::Result<PathBuf> {
@@ -337,4 +731,58 @@ fn is_hidden_or_ignored(entry: &walkdir::DirEntry) -> bool {
         .to_str()
         .map(|s| s.starts_with('.'))
         .unwrap_or(false)
+}
+
+pub fn expand_template_variables(template: &str, note_title: &str) -> String {
+    let date = crate::date::today_local();
+    template
+        .replace("{{title}}", note_title)
+        .replace("{{Title}}", note_title)
+        .replace("{{TITLE}}", note_title)
+        .replace("{{ title }}", note_title)
+        .replace("{{ Title }}", note_title)
+        .replace("{{date}}", &date)
+        .replace("{{Date}}", &date)
+        .replace("{{DATE}}", &date)
+        .replace("{{ date }}", &date)
+        .replace("{{ Date }}", &date)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_and_delete_note() {
+        let temp_dir = std::env::temp_dir().join(format!("better_obsidian_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let mut vault = Vault::open(temp_dir.clone()).unwrap();
+
+        let note = vault.create_note("Test Note", Some("Hello world")).unwrap();
+        assert!(note.abs_path.exists());
+        assert_eq!(vault.notes.len(), 1);
+
+        vault.delete_file(&note.abs_path).unwrap();
+        assert!(!note.abs_path.exists());
+        assert_eq!(vault.notes.len(), 0);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_create_and_delete_canvas() {
+        let temp_dir = std::env::temp_dir().join(format!("better_obsidian_test_canvas_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let mut vault = Vault::open(temp_dir.clone()).unwrap();
+
+        let canvas = vault.create_canvas("Test Canvas").unwrap();
+        assert!(canvas.abs_path.exists());
+        assert_eq!(vault.canvases.len(), 1);
+
+        vault.delete_file(&canvas.abs_path).unwrap();
+        assert!(!canvas.abs_path.exists());
+        assert_eq!(vault.canvases.len(), 0);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

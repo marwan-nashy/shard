@@ -1,4 +1,8 @@
+pub mod attachments;
+pub mod command_palette;
 pub mod editor;
+pub mod embeds;
+pub mod graph;
 pub mod modals;
 pub mod preview;
 pub mod sidebar;

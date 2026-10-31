@@ -67,6 +67,116 @@ pub fn extract_wikilinks(text: &str) -> Vec<ParsedWikilink> {
     links
 }
 
+pub fn rewrite_wikilinks(content: &str, old_note: &NoteItem, new_note: &NoteItem) -> String {
+    let old_rel = relative_stem(&old_note.rel_path);
+    let new_rel = relative_stem(&new_note.rel_path);
+    let mut output = String::with_capacity(content.len());
+    let mut fence = None;
+    for line in content.split_inclusive(char::from(10)) {
+        let trimmed = line.trim_start();
+        if let Some(delimiter) = fence {
+            if is_code_fence(trimmed, delimiter) {
+                fence = None;
+            }
+            output.push_str(line);
+            continue;
+        }
+        if is_code_fence(trimmed, char::from(96)) {
+            fence = Some(char::from(96));
+            output.push_str(line);
+            continue;
+        }
+        if is_code_fence(trimmed, '~') {
+            fence = Some('~');
+            output.push_str(line);
+            continue;
+        }
+        let mut index = 0;
+        let mut inline_code = false;
+        while index < line.len() {
+            let rest = &line[index..];
+            let byte = rest.as_bytes()[0];
+            if byte == 96 {
+                inline_code = !inline_code;
+                output.push(char::from(byte));
+                index += 1;
+                continue;
+            }
+            if !inline_code && rest.starts_with("[[") {
+                if let Some(end) = rest[2..].find("]]") {
+                    let inner_end = index + 2 + end;
+                    let inner = &line[index + 2..inner_end];
+                    output.push_str("[[");
+                    if let Some(rewritten) =
+                        rewrite_wikilink_target(inner, old_note, new_note, old_rel, new_rel)
+                    {
+                        output.push_str(&rewritten);
+                    } else {
+                        output.push_str(inner);
+                    }
+                    output.push_str("]]");
+                    index = inner_end + 2;
+                    continue;
+                }
+            }
+            let character = rest.chars().next().unwrap();
+            output.push(character);
+            index += character.len_utf8();
+        }
+    }
+    output
+}
+
+fn is_code_fence(line: &str, delimiter: char) -> bool {
+    line.as_bytes().starts_with(&[delimiter as u8; 3])
+}
+
+fn rewrite_wikilink_target(
+    inner: &str,
+    old_note: &NoteItem,
+    new_note: &NoteItem,
+    old_rel: &str,
+    new_rel: &str,
+) -> Option<String> {
+    let alias_start = inner.find('|').unwrap_or(inner.len());
+    let target = &inner[..alias_start];
+    let anchor_start = target.find('#').unwrap_or(target.len());
+    let base = target[..anchor_start].trim();
+    if base.is_empty() {
+        return None;
+    }
+    let normalized = base.replace(char::from(92), "/");
+    let extensionless = relative_stem(&normalized);
+    let matches = extensionless.eq_ignore_ascii_case(&old_note.title)
+        || extensionless.eq_ignore_ascii_case(old_rel)
+        || normalized.eq_ignore_ascii_case(&old_note.rel_path);
+    if !matches {
+        return None;
+    }
+    let replacement = if extensionless.contains('/') {
+        new_rel
+    } else {
+        &new_note.title
+    };
+    Some(format!(
+        "{}{}{}",
+        replacement,
+        &target[anchor_start..],
+        &inner[alias_start..]
+    ))
+}
+
+fn relative_stem(path: &str) -> &str {
+    let Some((stem, extension)) = path.rsplit_once('.') else {
+        return path;
+    };
+    if extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown") {
+        stem
+    } else {
+        path
+    }
+}
+
 /// Resolve a wikilink target string to a NoteItem in the vault
 pub fn resolve_wikilink<'a>(vault: &'a Vault, target: &str) -> Option<&'a NoteItem> {
     let clean_target = target.trim();

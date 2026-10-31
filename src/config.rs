@@ -5,6 +5,10 @@ use std::path::PathBuf;
 pub struct AppConfig {
     pub last_vault: Option<PathBuf>,
     pub recent_vaults: Vec<PathBuf>,
+    #[serde(default)]
+    pub open_tabs: Vec<PathBuf>,
+    #[serde(default)]
+    pub active_tab: Option<PathBuf>,
 }
 
 impl Default for AppConfig {
@@ -12,6 +16,8 @@ impl Default for AppConfig {
         Self {
             last_vault: None,
             recent_vaults: Vec::new(),
+            open_tabs: Vec::new(),
+            active_tab: None,
         }
     }
 }
@@ -53,6 +59,12 @@ impl AppConfig {
         if self.recent_vaults.len() > 10 {
             self.recent_vaults.truncate(10);
         }
+        self.save();
+    }
+
+    pub fn set_open_tabs(&mut self, tabs: Vec<PathBuf>, active_tab: Option<PathBuf>) {
+        self.open_tabs = tabs;
+        self.active_tab = active_tab;
         self.save();
     }
 }
