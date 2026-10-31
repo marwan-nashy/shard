@@ -52,88 +52,96 @@ impl SettingsDialog {
         }
 
         let mut is_open = self.is_open;
+        let screen_rect = ctx.screen_rect();
+        let default_w = 800.0_f32.min(screen_rect.width() * 0.9);
+        let default_h = 560.0_f32.min(screen_rect.height() * 0.85);
 
         Window::new("Settings")
             .id(Id::new("modal_settings_dialog"))
             .collapsible(false)
             .resizable(true)
-            .default_size(egui::vec2(800.0, 560.0))
+            .default_pos(screen_rect.center())
+            .pivot(Align2::CENTER_CENTER)
+            .default_size(egui::vec2(default_w, default_h))
             .min_size(egui::vec2(680.0, 460.0))
-            .anchor(Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .open(&mut is_open)
             .show(ctx, |ui| {
+                ui.set_min_size(egui::vec2(680.0, 460.0));
+                let total_size = ui.available_size();
                 let accent = Theme::accent_to_color(config.accent_color);
 
                 ui.horizontal(|ui| {
+                    ui.set_height(total_size.y);
+
                     // Left navigation category list (width 160px)
-                    ui.allocate_ui(egui::vec2(160.0, ui.available_height()), |ui| {
-                        ui.vertical(|ui| {
-                            ui.add_space(4.0);
-                            for (cat, label) in [
-                                (SettingsCategory::General, "General"),
-                                (SettingsCategory::Appearance, "Appearance"),
-                                (SettingsCategory::CorePlugins, "Core plugins"),
-                                (SettingsCategory::Hotkeys, "Hotkeys"),
-                                (SettingsCategory::About, "About"),
-                            ] {
-                                let is_selected = self.category == cat;
-                                let (rect, response) = ui.allocate_exact_size(
-                                    egui::vec2(ui.available_width() - 8.0, 32.0),
-                                    egui::Sense::click(),
+                    ui.vertical(|ui| {
+                        ui.set_width(160.0);
+                        ui.set_height(total_size.y);
+                        ui.add_space(4.0);
+                        for (cat, label) in [
+                            (SettingsCategory::General, "General"),
+                            (SettingsCategory::Appearance, "Appearance"),
+                            (SettingsCategory::CorePlugins, "Core plugins"),
+                            (SettingsCategory::Hotkeys, "Hotkeys"),
+                            (SettingsCategory::About, "About"),
+                        ] {
+                            let is_selected = self.category == cat;
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width() - 8.0, 32.0),
+                                egui::Sense::click(),
+                            );
+
+                            if is_selected {
+                                ui.painter().rect_filled(rect, 4.0, Theme::BG_CARD);
+                                ui.painter().line_segment(
+                                    [
+                                        rect.left_top() + egui::vec2(1.0, 4.0),
+                                        rect.left_bottom() + egui::vec2(1.0, -4.0),
+                                    ],
+                                    Stroke::new(2.5_f32, accent),
                                 );
-
-                                if is_selected {
-                                    ui.painter().rect_filled(rect, 4.0, Theme::BG_CARD);
-                                    ui.painter().line_segment(
-                                        [
-                                            rect.left_top() + egui::vec2(1.0, 4.0),
-                                            rect.left_bottom() + egui::vec2(1.0, -4.0),
-                                        ],
-                                        Stroke::new(2.5_f32, accent),
-                                    );
-                                } else if response.hovered() {
-                                    ui.painter().rect_filled(rect, 4.0, Theme::BG_ROW_HOVER);
-                                }
-
-                                let text_color = if is_selected {
-                                    Theme::TEXT_PRIMARY
-                                } else if response.hovered() {
-                                    Theme::TEXT_PRIMARY
-                                } else {
-                                    Theme::TEXT_MUTED
-                                };
-
-                                ui.painter().text(
-                                    rect.left_center() + egui::vec2(14.0, 0.0),
-                                    Align2::LEFT_CENTER,
-                                    label,
-                                    egui::FontId::proportional(13.0),
-                                    text_color,
-                                );
-
-                                if response.clicked() {
-                                    self.category = cat;
-                                }
-                                ui.add_space(2.0);
+                            } else if response.hovered() {
+                                ui.painter().rect_filled(rect, 4.0, Theme::BG_ROW_HOVER);
                             }
-                        });
+
+                            let text_color = if is_selected {
+                                Theme::TEXT_PRIMARY
+                            } else if response.hovered() {
+                                Theme::TEXT_PRIMARY
+                            } else {
+                                Theme::TEXT_MUTED
+                            };
+
+                            ui.painter().text(
+                                rect.left_center() + egui::vec2(14.0, 0.0),
+                                Align2::LEFT_CENTER,
+                                label,
+                                egui::FontId::proportional(13.0),
+                                text_color,
+                            );
+
+                            if response.clicked() {
+                                self.category = cat;
+                            }
+                            ui.add_space(2.0);
+                        }
                     });
 
                     // Vertical divider between categories and content
                     ui.painter().line_segment(
                         [
                             egui::pos2(ui.cursor().min.x, ui.min_rect().min.y),
-                            egui::pos2(ui.cursor().min.x, ui.max_rect().max.y),
+                            egui::pos2(ui.cursor().min.x, ui.min_rect().min.y + total_size.y),
                         ],
                         Stroke::new(1.0_f32, Theme::BORDER),
                     );
                     ui.add_space(12.0);
 
-                    // Right content pane filling ALL available width and height
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(ui.available_width(), ui.available_height()),
-                        egui::Layout::top_down(egui::Align::LEFT),
-                        |ui| match self.category {
+                    // Right content pane filling the rest
+                    ui.vertical(|ui| {
+                        ui.set_width(ui.available_width());
+                        ui.set_height(total_size.y);
+                        match self.category {
                             SettingsCategory::General => {
                                 render_general_tab(ui, vault, config, switch_vault, pick_vault);
                             }
@@ -149,8 +157,8 @@ impl SettingsDialog {
                             SettingsCategory::About => {
                                 render_about_tab(ui);
                             }
-                        },
-                    );
+                        }
+                    });
                 });
             });
 
@@ -192,15 +200,30 @@ fn toggle_switch(ui: &mut egui::Ui, enabled: &mut bool, accent: Color32) -> egui
     response
 }
 
+fn calculate_hotkey_width(keys_str: &str) -> f32 {
+    let parts: Vec<&str> = keys_str.split('+').map(|s| s.trim()).collect();
+    let mut total = 0.0;
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            total += 10.0;
+        }
+        total += (part.len() as f32 * 7.5 + 14.0).max(24.0);
+    }
+    total
+}
+
+/// Renders hotkey keys strictly left-to-right so modifiers (Ctrl, Alt, Shift)
+/// appear before the key letter.
 fn render_hotkey_pill(ui: &mut egui::Ui, keys_str: &str) {
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
         let parts: Vec<&str> = keys_str.split('+').map(|s| s.trim()).collect();
         for (i, part) in parts.iter().enumerate() {
             if i > 0 {
                 ui.label(RichText::new("+").size(10.0).color(Theme::TEXT_DIMMED));
             }
             let (rect, _) = ui.allocate_exact_size(
-                egui::vec2((part.len() as f32 * 7.5 + 12.0).max(22.0), 20.0),
+                egui::vec2((part.len() as f32 * 7.5 + 14.0).max(24.0), 20.0),
                 egui::Sense::hover(),
             );
             ui.painter().rect_filled(rect, 4.0, Theme::BG_CARD);
@@ -590,25 +613,46 @@ fn render_core_plugins_tab(ui: &mut egui::Ui, config: &mut AppConfig, accent: Co
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let mut plugin_row = |ui: &mut egui::Ui, name: &str, desc: &str, enabled: &mut bool| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new(name)
-                                .strong()
-                                .size(12.5)
-                                .color(Theme::TEXT_PRIMARY),
-                        );
-                        ui.label(RichText::new(desc).size(11.0).color(Theme::TEXT_MUTED));
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if toggle_switch(ui, enabled, accent).changed() {
-                            plugins_changed = true;
-                        }
-                    });
+                let row_w = ui.available_width() - 8.0;
+                let row_h = 42.0;
+                let (rect, row_resp) =
+                    ui.allocate_exact_size(egui::vec2(row_w, row_h), egui::Sense::click());
+                if row_resp.hovered() {
+                    ui.painter().rect_filled(rect, 4.0, Theme::BG_ROW_HOVER);
+                }
+                if row_resp.clicked() {
+                    *enabled = !*enabled;
+                    plugins_changed = true;
+                }
+
+                // Left: Name & description
+                let text_rect = egui::Rect::from_min_max(
+                    rect.min + egui::vec2(8.0, 4.0),
+                    egui::pos2(rect.max.x - 56.0, rect.max.y - 4.0),
+                );
+                let mut text_ui = ui.new_child(egui::UiBuilder::new().max_rect(text_rect));
+                text_ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new(name)
+                            .strong()
+                            .size(12.5)
+                            .color(Theme::TEXT_PRIMARY),
+                    );
+                    ui.label(RichText::new(desc).size(11.0).color(Theme::TEXT_MUTED));
                 });
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(4.0);
+
+                // Right: Pill toggle switch
+                let sw_pos = egui::pos2(rect.max.x - 44.0, rect.center().y - 9.0);
+                let sw_rect = egui::Rect::from_min_size(sw_pos, egui::vec2(34.0, 18.0));
+                let mut sw_ui = ui.new_child(egui::UiBuilder::new().max_rect(sw_rect));
+                if toggle_switch(&mut sw_ui, enabled, accent).changed() {
+                    plugins_changed = true;
+                }
+
+                ui.painter().line_segment(
+                    [rect.left_bottom(), rect.right_bottom()],
+                    Stroke::new(1.0_f32, Color32::from_rgb(32, 32, 32)),
+                );
             };
 
             plugin_row(
@@ -815,23 +859,52 @@ fn render_hotkeys_tab(ui: &mut egui::Ui, filter: &mut String) {
                     continue;
                 }
 
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new(name)
-                                .strong()
-                                .size(12.5)
-                                .color(Theme::TEXT_PRIMARY),
-                        );
-                        ui.label(RichText::new(desc).size(11.0).color(Theme::TEXT_MUTED));
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        render_hotkey_pill(ui, keys);
-                    });
+                let row_w = ui.available_width() - 8.0;
+                let row_h = 36.0;
+                let (rect, row_resp) =
+                    ui.allocate_exact_size(egui::vec2(row_w, row_h), egui::Sense::hover());
+                if row_resp.hovered() {
+                    ui.painter().rect_filled(rect, 4.0, Theme::BG_ROW_HOVER);
+                }
+
+                // Left: Command name & description
+                let text_rect = egui::Rect::from_min_max(
+                    rect.min + egui::vec2(8.0, 4.0),
+                    egui::pos2(rect.max.x - 220.0, rect.max.y - 4.0),
+                );
+                let mut text_ui = ui.new_child(egui::UiBuilder::new().max_rect(text_rect));
+                text_ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(name)
+                            .strong()
+                            .size(12.5)
+                            .color(Theme::TEXT_PRIMARY),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(format!("— {}", desc))
+                            .size(11.0)
+                            .color(Theme::TEXT_MUTED),
+                    );
                 });
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(4.0);
+
+                // Right: Hotkey keycap pill (EXPLICIT left_to_right layout so Ctrl, Alt, Shift come BEFORE letter)
+                let pill_w = calculate_hotkey_width(keys);
+                let pill_rect = egui::Rect::from_min_size(
+                    egui::pos2(rect.max.x - pill_w - 8.0, rect.center().y - 10.0),
+                    egui::vec2(pill_w, 20.0),
+                );
+                let mut pill_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(pill_rect)
+                        .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                );
+                render_hotkey_pill(&mut pill_ui, keys);
+
+                ui.painter().line_segment(
+                    [rect.left_bottom(), rect.right_bottom()],
+                    Stroke::new(1.0_f32, Color32::from_rgb(32, 32, 32)),
+                );
             }
         });
 }
@@ -889,7 +962,7 @@ fn render_about_tab(ui: &mut egui::Ui) {
                     .size(10.5)
                     .color(Theme::TEXT_DIMMED),
             );
-            ui.add_space(6.0);
+            ui.add_space(8.0);
 
             for (spec, val) in [
                 ("Version", "0.1.0"),
@@ -902,7 +975,7 @@ fn render_about_tab(ui: &mut egui::Ui) {
                 ("Licensing", "MIT / Open clone"),
             ] {
                 ui.horizontal(|ui| {
-                    ui.allocate_ui(egui::vec2(160.0, 20.0), |ui| {
+                    ui.allocate_ui(egui::vec2(160.0, 22.0), |ui| {
                         ui.label(RichText::new(spec).size(11.5).color(Theme::TEXT_MUTED));
                     });
                     ui.label(
@@ -912,7 +985,7 @@ fn render_about_tab(ui: &mut egui::Ui) {
                             .color(Theme::TEXT_PRIMARY),
                     );
                 });
-                ui.add_space(4.0);
+                ui.add_space(3.0);
             }
         });
 }
