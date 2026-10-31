@@ -3,7 +3,7 @@ use super::theme::Theme;
 use crate::app::{paint_app_mark, BetterObsidianApp};
 use crate::vault::NoteItem;
 use egui::text::{CCursor, CCursorRange};
-use egui::{Color32, RichText, ScrollArea, Stroke, TextEdit};
+use egui::{Color32, Key, RichText, ScrollArea, Stroke, TextEdit};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,6 +20,10 @@ pub fn render_editor_area(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     }
 
     render_tab_bar(ui, app);
+
+    if app.in_note_search_open {
+        render_in_note_search_bar(ui, app);
+    }
 
     let mut action = None;
     let view_mode = app.view_mode;
@@ -206,7 +210,65 @@ pub fn render_editor_area(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
                     }
                 });
 
-            if let (Some(active), Some(vault)) = (&mut app.active_note, &app.vault) {
+            if let Some(split) = &mut app.split_note {
+                let title = split.title.clone();
+                let abs_path = split.abs_path.clone();
+                let rel_path = split.rel_path.clone();
+                let mut close_split = false;
+
+                ScrollArea::vertical()
+                    .id_salt("split_right_note_scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        egui::Frame::none()
+                            .inner_margin(egui::Margin::symmetric(24.0, 16.0))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    let title_resp = ui.add(
+                                        egui::Label::new(
+                                            RichText::new(&title)
+                                                .strong()
+                                                .size(24.0)
+                                                .color(Theme::TEXT_PRIMARY),
+                                        )
+                                        .sense(egui::Sense::click()),
+                                    );
+                                    if title_resp.clicked() {
+                                        rename_request = Some((abs_path.clone(), rel_path.clone()));
+                                    }
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui
+                                                .small_button("×")
+                                                .on_hover_text("Close split pane")
+                                                .clicked()
+                                            {
+                                                close_split = true;
+                                            }
+                                        },
+                                    );
+                                });
+                                ui.add_space(8.0);
+
+                                show_note_editor(
+                                    ui,
+                                    &mut split.content,
+                                    ("editor_split_right", split.abs_path.clone()),
+                                    &split.abs_path,
+                                    &mut None,
+                                    &mut None,
+                                    &mut false,
+                                    completion_notes,
+                                );
+                            });
+                    });
+
+                if close_split {
+                    app.split_note = None;
+                    app.view_mode = ViewMode::Edit;
+                }
+            } else if let (Some(active), Some(vault)) = (&mut app.active_note, &app.vault) {
                 let title = active.title.clone();
                 ScrollArea::vertical()
                     .id_salt("preview_split_scroll")
@@ -321,7 +383,7 @@ fn show_note_editor(
     }
 
     let editor = TextEdit::multiline(content)
-        .font(egui::TextStyle::Monospace)
+        .font(egui::TextStyle::Body)
         .desired_width(f32::INFINITY)
         .min_size(ui.available_size())
         .hint_text("Start writing your note…")
@@ -333,6 +395,61 @@ fn show_note_editor(
         output.response.request_focus();
     }
     *focus_editor_next_frame = false;
+
+    if output.response.has_focus() {
+        let (cmd_b, cmd_i, cmd_k) = ui.input(|i| {
+            let cmd = i.modifiers.command;
+            (
+                cmd && i.key_pressed(egui::Key::B),
+                cmd && i.key_pressed(egui::Key::I),
+                cmd && i.key_pressed(egui::Key::K),
+            )
+        });
+
+        if cmd_b || cmd_i || cmd_k {
+            let mut state =
+                egui::widgets::text_edit::TextEditState::load(ui.ctx(), id).unwrap_or_default();
+            let total_chars = content.chars().count();
+            let (start_char, end_char) = if let Some(cursor_range) = state.cursor.char_range() {
+                let [s, e] = cursor_range.sorted();
+                (s.index.min(total_chars), e.index.min(total_chars))
+            } else {
+                (total_chars, total_chars)
+            };
+
+            let byte_start = char_to_byte_index(content, start_char);
+            let byte_end = char_to_byte_index(content, end_char);
+
+            let (prefix, suffix) = if cmd_b {
+                ("**", "**")
+            } else if cmd_i {
+                ("*", "*")
+            } else {
+                ("[[", "]]")
+            };
+
+            if start_char < end_char {
+                let selected_text = content[byte_start..byte_end].to_string();
+                let wrapped = format!("{prefix}{selected_text}{suffix}");
+                content.replace_range(byte_start..byte_end, &wrapped);
+                let new_cursor_start = start_char + prefix.chars().count();
+                let new_cursor_end = new_cursor_start + selected_text.chars().count();
+                state.cursor.set_char_range(Some(CCursorRange::two(
+                    CCursor::new(new_cursor_start),
+                    CCursor::new(new_cursor_end),
+                )));
+            } else {
+                let insert_str = format!("{prefix}{suffix}");
+                content.replace_range(byte_start..byte_start, &insert_str);
+                let inside_cursor = start_char + prefix.chars().count();
+                state
+                    .cursor
+                    .set_char_range(Some(CCursorRange::one(CCursor::new(inside_cursor))));
+            }
+            state.store(ui.ctx(), id);
+            output.response.request_focus();
+        }
+    }
 
     let Some(cursor) = output.cursor_range.filter(|range| range.is_empty()) else {
         return;
@@ -442,6 +559,7 @@ fn render_tab_bar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
 
     let mut switch_to = None;
     let mut close = None;
+    let mut open_split = None;
     let mut create_new = false;
     let mut toggle_view_mode = false;
     let mut toggle_split = false;
@@ -528,8 +646,13 @@ fn render_tab_bar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
                                             if label_resp.clicked() && !is_active {
                                                 switch_to = Some(path.clone());
                                             }
-                                            let label_resp = label_resp.on_hover_text(path.display().to_string());
+                                            let label_resp = label_resp
+                                                .on_hover_text(path.display().to_string());
                                             label_resp.context_menu(|ui| {
+                                                if ui.button("Open to the right").clicked() {
+                                                    open_split = Some(path.clone());
+                                                    ui.close_menu();
+                                                }
                                                 if ui.button("Close tab").clicked() {
                                                     close = Some(path.clone());
                                                     ui.close_menu();
@@ -541,7 +664,8 @@ fn render_tab_bar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
                                                     )
                                                     .clicked()
                                                 {
-                                                    tab_delete = Some((path.clone(), title.clone()));
+                                                    tab_delete =
+                                                        Some((path.clone(), title.clone()));
                                                     ui.close_menu();
                                                 }
                                             });
@@ -604,14 +728,29 @@ fn render_tab_bar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
                             properties_requested = true;
                             ui.close_menu();
                         }
+                        let is_bm = if let Some(active) = &app.active_note {
+                            app.is_bookmarked(&active.abs_path)
+                        } else {
+                            false
+                        };
+                        let bm_label = if is_bm {
+                            "Remove bookmark · Ctrl+B"
+                        } else {
+                            "Bookmark note · Ctrl+B"
+                        };
+                        if ui.button(bm_label).clicked() {
+                            if let Some(active) = &app.active_note {
+                                let p = active.abs_path.clone();
+                                app.toggle_bookmark(p);
+                            }
+                            ui.close_menu();
+                        }
                         if ui.button("Rename note…").clicked() {
                             rename_requested = true;
                             ui.close_menu();
                         }
                         if ui
-                            .button(
-                                RichText::new("Delete note…").color(Theme::ACCENT_RED),
-                            )
+                            .button(RichText::new("Delete note…").color(Theme::ACCENT_RED))
                             .clicked()
                         {
                             delete_requested = true;
@@ -651,6 +790,9 @@ fn render_tab_bar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     }
     if let Some(path) = close {
         app.request_close_tab(&path);
+    }
+    if let Some(path) = open_split {
+        app.open_note_in_split(&path);
     }
     if create_new {
         app.open_new_note_dialog();
@@ -1062,4 +1204,165 @@ fn render_welcome_screen(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
     if show_graph {
         app.sidebar_tab = crate::ui::sidebar::SidebarTab::Graph;
     }
+}
+
+fn find_search_matches(content: &str, query: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let chars: Vec<char> = content.chars().collect();
+    let q_chars: Vec<char> = query.chars().collect();
+    if q_chars.is_empty() || chars.len() < q_chars.len() {
+        return Vec::new();
+    }
+    let q_len = q_chars.len();
+    let mut matches = Vec::new();
+    if case_sensitive {
+        for i in 0..=(chars.len() - q_len) {
+            if chars[i..i + q_len] == q_chars[..] {
+                matches.push((i, i + q_len));
+            }
+        }
+    } else {
+        let q_lower: Vec<char> = query.to_lowercase().chars().collect();
+        let c_lower: Vec<char> = content.to_lowercase().chars().collect();
+        if c_lower.len() < q_lower.len() {
+            return Vec::new();
+        }
+        let q_len = q_lower.len();
+        for i in 0..=(c_lower.len() - q_len) {
+            if c_lower[i..i + q_len] == q_lower[..] {
+                matches.push((i, i + q_len));
+            }
+        }
+    }
+    matches
+}
+
+fn render_in_note_search_bar(ui: &mut egui::Ui, app: &mut BetterObsidianApp) {
+    let Some(active) = &app.active_note else {
+        return;
+    };
+    let content = active.content.clone();
+    let query = app.in_note_search_query.clone();
+    let case_sensitive = app.in_note_search_case_sensitive;
+    let matches = find_search_matches(&content, &query, case_sensitive);
+
+    let editor_id = ui.make_persistent_id(("editor_full", active.abs_path.clone()));
+
+    egui::Frame::none()
+        .fill(Theme::BG_CARD)
+        .stroke(Stroke::new(1.0_f32, Theme::BORDER))
+        .rounding(egui::Rounding {
+            nw: 0.0,
+            ne: 0.0,
+            sw: 6.0,
+            se: 6.0,
+        })
+        .inner_margin(egui::Margin::symmetric(12.0, 4.0))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Find").size(11.0).color(Theme::TEXT_MUTED));
+                let search_resp = ui.add(
+                    TextEdit::singleline(&mut app.in_note_search_query)
+                        .hint_text("Find in note…")
+                        .desired_width(160.0),
+                );
+
+                if app.in_note_search_focus {
+                    search_resp.request_focus();
+                    app.in_note_search_focus = false;
+                }
+
+                let enter = search_resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
+                let shift = ui.input(|i| i.modifiers.shift);
+
+                if !query.is_empty() {
+                    let total = matches.len();
+                    if total > 0 {
+                        if app.in_note_search_match_idx >= total {
+                            app.in_note_search_match_idx = 0;
+                        }
+                        ui.label(
+                            RichText::new(format!(
+                                "{}/{}",
+                                app.in_note_search_match_idx + 1,
+                                total
+                            ))
+                            .size(11.0)
+                            .color(Theme::TEXT_MUTED),
+                        );
+                    } else {
+                        ui.label(RichText::new("0/0").size(11.0).color(Theme::ACCENT_RED));
+                    }
+
+                    let mut jump_idx = None;
+
+                    if ui
+                        .small_button("<")
+                        .on_hover_text("Previous match · Shift+Enter")
+                        .clicked()
+                        || (enter && shift)
+                    {
+                        if total > 0 {
+                            app.in_note_search_match_idx = if app.in_note_search_match_idx == 0 {
+                                total - 1
+                            } else {
+                                app.in_note_search_match_idx - 1
+                            };
+                            jump_idx = Some(app.in_note_search_match_idx);
+                        }
+                    }
+
+                    if ui
+                        .small_button(">")
+                        .on_hover_text("Next match · Enter")
+                        .clicked()
+                        || (enter && !shift)
+                    {
+                        if total > 0 {
+                            app.in_note_search_match_idx =
+                                (app.in_note_search_match_idx + 1) % total;
+                            jump_idx = Some(app.in_note_search_match_idx);
+                        }
+                    }
+
+                    if search_resp.changed() && total > 0 {
+                        app.in_note_search_match_idx = 0;
+                        jump_idx = Some(0);
+                    }
+
+                    if let Some(idx) = jump_idx {
+                        if let Some(&(s, e)) = matches.get(idx) {
+                            let mut state =
+                                egui::widgets::text_edit::TextEditState::load(ui.ctx(), editor_id)
+                                    .unwrap_or_default();
+                            state.cursor.set_char_range(Some(CCursorRange::two(
+                                CCursor::new(s),
+                                CCursor::new(e),
+                            )));
+                            state.store(ui.ctx(), editor_id);
+                        }
+                    }
+                }
+
+                if ui
+                    .selectable_label(app.in_note_search_case_sensitive, "Aa")
+                    .on_hover_text("Match case")
+                    .clicked()
+                {
+                    app.in_note_search_case_sensitive = !app.in_note_search_case_sensitive;
+                }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .small_button("×")
+                        .on_hover_text("Close find · Esc")
+                        .clicked()
+                    {
+                        app.in_note_search_open = false;
+                    }
+                });
+            });
+        });
 }

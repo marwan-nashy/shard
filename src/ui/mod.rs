@@ -5,5 +5,6 @@ pub mod embeds;
 pub mod graph;
 pub mod modals;
 pub mod preview;
+pub mod settings;
 pub mod sidebar;
 pub mod theme;

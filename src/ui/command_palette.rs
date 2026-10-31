@@ -14,6 +14,9 @@ pub enum PaletteAction {
     SearchNotes,
     ShowGraph,
     ShowOutline,
+    ShowBookmarks,
+    ToggleBookmark,
+    OpenSettings,
     SetViewMode(ViewMode),
     OpenNote(PathBuf),
     InsertTemplate,
@@ -74,7 +77,8 @@ impl CommandPalette {
             .show(ctx, |ui| {
                 let (rect, response) =
                     ui.allocate_exact_size(screen_rect.size(), egui::Sense::click());
-                ui.painter().rect_filled(rect, 0.0, Color32::from_black_alpha(110));
+                ui.painter()
+                    .rect_filled(rect, 0.0, Color32::from_black_alpha(110));
                 if response.clicked() {
                     close = true;
                 }
@@ -140,6 +144,21 @@ impl CommandPalette {
                 title: "Save active note".into(),
                 detail: "Ctrl+S".into(),
                 action: PaletteAction::SaveNote,
+            },
+            PaletteEntry {
+                title: "Bookmarks: Show bookmarked notes".into(),
+                detail: "Open bookmarks in the sidebar".into(),
+                action: PaletteAction::ShowBookmarks,
+            },
+            PaletteEntry {
+                title: "Bookmarks: Bookmark / unbookmark active note".into(),
+                detail: "Ctrl+B".into(),
+                action: PaletteAction::ToggleBookmark,
+            },
+            PaletteEntry {
+                title: "Open settings".into(),
+                detail: "Ctrl+, · Themes, hotkeys, appearance".into(),
+                action: PaletteAction::OpenSettings,
             },
         ];
 

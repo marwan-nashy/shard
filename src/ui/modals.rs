@@ -43,7 +43,7 @@ impl NewNoteDialog {
         let mut created_note = None;
         let mut close_dialog = false;
 
-        Window::new("➕ Create New Note")
+        Window::new("Create New Note")
             .id(Id::new("modal_new_note"))
             .collapsible(false)
             .resizable(false)
@@ -118,6 +118,96 @@ impl NewNoteDialog {
         }
 
         created_note
+    }
+}
+
+#[derive(Default)]
+pub struct NewFolderDialog {
+    pub is_open: bool,
+    pub input_name: String,
+    pub error_message: Option<String>,
+}
+
+impl NewFolderDialog {
+    pub fn open(&mut self) {
+        self.is_open = true;
+        self.input_name = "New folder".to_string();
+        self.error_message = None;
+    }
+
+    pub fn render(&mut self, ctx: &egui::Context, vault: &mut Option<Vault>) -> Option<PathBuf> {
+        if !self.is_open {
+            return None;
+        }
+
+        let mut created_folder = None;
+        let mut close_dialog = false;
+
+        Window::new("Create New Folder")
+            .id(Id::new("modal_new_folder"))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .open(&mut self.is_open)
+            .show(ctx, |ui| {
+                ui.set_min_width(320.0);
+                ui.label(
+                    RichText::new("Folder Name")
+                        .size(12.0)
+                        .color(Theme::TEXT_MUTED),
+                );
+                ui.add_space(4.0);
+
+                let enter_pressed = ui
+                    .add(
+                        TextEdit::singleline(&mut self.input_name)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("e.g. Work or Projects/Design"),
+                    )
+                    .lost_focus()
+                    && ui.input(|i| i.key_pressed(Key::Enter));
+
+                if let Some(err) = &self.error_message {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(err).color(Theme::ACCENT_RED).size(11.0));
+                }
+
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        close_dialog = true;
+                    }
+
+                    let can_create = !self.input_name.trim().is_empty();
+                    let should_create = ui
+                        .add_enabled(can_create, egui::Button::new("Create Folder"))
+                        .clicked()
+                        || (can_create && enter_pressed);
+
+                    if should_create {
+                        if let Some(vault) = vault {
+                            match vault.create_folder(&self.input_name) {
+                                Ok(path) => {
+                                    created_folder = Some(path);
+                                    close_dialog = true;
+                                }
+                                Err(e) => {
+                                    self.error_message = Some(e.to_string());
+                                }
+                            }
+                        } else {
+                            self.error_message = Some("No open vault.".to_string());
+                        }
+                    }
+                });
+            });
+
+        if close_dialog {
+            self.is_open = false;
+            self.error_message = None;
+        }
+
+        created_folder
     }
 }
 
@@ -204,7 +294,7 @@ impl UnsavedDialog {
 
         let mut choice = None;
 
-        Window::new("⚠️ Unsaved Changes")
+        Window::new("Unsaved Changes")
             .id(Id::new("modal_unsaved_changes"))
             .collapsible(false)
             .resizable(false)
@@ -225,7 +315,7 @@ impl UnsavedDialog {
 
                 ui.horizontal(|ui| {
                     if ui
-                        .button(RichText::new("💾 Save & Continue").color(Theme::ACCENT_GREEN))
+                        .button(RichText::new("Save & Continue").color(Theme::ACCENT_GREEN))
                         .clicked()
                     {
                         if let Some(action) = self.pending_action.take() {
@@ -277,7 +367,7 @@ impl MissingWikilinkDialog {
         let mut created_note = None;
         let mut close_dialog = false;
 
-        Window::new("🔗 Note Does Not Exist")
+        Window::new("Note Does Not Exist")
             .id(Id::new("modal_missing_wikilink"))
             .collapsible(false)
             .resizable(false)
@@ -304,9 +394,7 @@ impl MissingWikilinkDialog {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     if ui
-                        .button(
-                            RichText::new(format!("➕ Create '{}.md'", self.target_name)).strong(),
-                        )
+                        .button(RichText::new(format!("Create '{}.md'", self.target_name)).strong())
                         .clicked()
                     {
                         if let Some(v) = vault {
@@ -365,7 +453,7 @@ impl TemplatePickerDialog {
         let mut close = false;
         let mut is_open = self.is_open;
 
-        Window::new("📄 Insert Template")
+        Window::new("Insert Template")
             .id(Id::new("modal_insert_template"))
             .collapsible(false)
             .resizable(false)
@@ -378,7 +466,7 @@ impl TemplatePickerDialog {
                 if !has_active_note {
                     ui.add_space(4.0);
                     ui.label(
-                        RichText::new("⚠️ No active note is open to insert a template into.")
+                        RichText::new("No active note is open to insert a template into.")
                             .color(Theme::ACCENT_RED)
                             .strong(),
                     );
@@ -467,7 +555,7 @@ impl TemplatePickerDialog {
                         .max_height(240.0)
                         .show(ui, |ui| {
                             for (index, item) in filtered.iter().enumerate() {
-                                let label_text = format!("📄 {}", item.rel_path);
+                                let label_text = item.rel_path.clone();
                                 let response =
                                     ui.selectable_label(index == self.selected, label_text);
                                 if response.clicked() {
@@ -568,8 +656,10 @@ impl DeleteConfirmDialog {
             .order(egui::Order::Middle)
             .fixed_pos(screen_rect.min)
             .show(ctx, |ui| {
-                let (rect, response) = ui.allocate_exact_size(screen_rect.size(), egui::Sense::click());
-                ui.painter().rect_filled(rect, 0.0, Color32::from_black_alpha(120));
+                let (rect, response) =
+                    ui.allocate_exact_size(screen_rect.size(), egui::Sense::click());
+                ui.painter()
+                    .rect_filled(rect, 0.0, Color32::from_black_alpha(120));
                 if response.clicked() {
                     close = true;
                 }

@@ -1,4 +1,5 @@
 /target/
+/dist/
 /.codex-background/
 /.agents/
 /skills-lock.json

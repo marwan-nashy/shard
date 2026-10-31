@@ -152,6 +152,26 @@ impl Vault {
         })
     }
 
+    pub fn create_folder(&mut self, folder_name: &str) -> io::Result<PathBuf> {
+        let trimmed = folder_name.trim();
+        if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Folder name cannot be empty.",
+            ));
+        }
+        let target = self.root_path.join(trimmed);
+        if !target.starts_with(&self.root_path) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Cannot create folder outside vault.",
+            ));
+        }
+        fs::create_dir_all(&target)?;
+        self.refresh_notes()?;
+        Ok(target)
+    }
+
     /// Read note content on-demand
     pub fn load_note(&self, abs_path: &Path) -> io::Result<ActiveNote> {
         let content = fs::read_to_string(abs_path)?;
@@ -446,13 +466,17 @@ impl Vault {
         }
         let metadata = fs::symlink_metadata(path)?;
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(invalid_note_path("Only regular vault files can be deleted."));
+            return Err(invalid_note_path(
+                "Only regular vault files can be deleted.",
+            ));
         }
         let parent = path
             .parent()
             .ok_or_else(|| invalid_note_path("The file has no parent directory."))?;
         if !fs::canonicalize(parent)?.starts_with(&self.root_path) {
-            return Err(invalid_note_path("The file parent resolves outside the vault."));
+            return Err(invalid_note_path(
+                "The file parent resolves outside the vault.",
+            ));
         }
 
         fs::remove_file(path)?;
@@ -754,7 +778,8 @@ mod tests {
 
     #[test]
     fn test_create_and_delete_note() {
-        let temp_dir = std::env::temp_dir().join(format!("better_obsidian_test_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("better_obsidian_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         let mut vault = Vault::open(temp_dir.clone()).unwrap();
 
@@ -771,7 +796,10 @@ mod tests {
 
     #[test]
     fn test_create_and_delete_canvas() {
-        let temp_dir = std::env::temp_dir().join(format!("better_obsidian_test_canvas_{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "better_obsidian_test_canvas_{}",
+            std::process::id()
+        ));
         let _ = fs::create_dir_all(&temp_dir);
         let mut vault = Vault::open(temp_dir.clone()).unwrap();
 

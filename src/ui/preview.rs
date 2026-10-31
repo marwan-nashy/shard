@@ -20,6 +20,8 @@ pub enum InlineSpan {
     Italic(String),
     Code(String),
     Strikethrough(String),
+    FootnoteRef(String),
+    InlineMath(String),
     Wikilink {
         target: String,
         display: String,
@@ -141,6 +143,36 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
                         heading: parsed.heading,
                     });
                     remaining = &remaining[2 + end + 2..];
+                    continue;
+                }
+            }
+        }
+
+        // Footnote reference [^label]
+        if remaining.starts_with("[^") {
+            if let Some(end) = remaining[2..].find(']') {
+                let label = &remaining[2..2 + end];
+                if !label.is_empty() && !label.contains('\n') && !label.contains(' ') {
+                    flush_text(&mut spans, &mut current_text);
+                    spans.push(InlineSpan::FootnoteRef(label.to_string()));
+                    remaining = &remaining[2 + end + 1..];
+                    continue;
+                }
+            }
+        }
+
+        // Inline math $...$
+        if remaining.starts_with('$') && !remaining.starts_with("$$") {
+            if let Some(end) = remaining[1..].find('$') {
+                let math = &remaining[1..1 + end];
+                if !math.is_empty()
+                    && !math.contains('\n')
+                    && !math.starts_with(' ')
+                    && !math.ends_with(' ')
+                {
+                    flush_text(&mut spans, &mut current_text);
+                    spans.push(InlineSpan::InlineMath(math.to_string()));
+                    remaining = &remaining[1 + end + 1..];
                     continue;
                 }
             }
@@ -278,6 +310,30 @@ pub fn render_single_span(
         InlineSpan::Strikethrough(t) => {
             ui.label(RichText::new(t).strikethrough().color(Theme::TEXT_MUTED));
         }
+        InlineSpan::FootnoteRef(label) => {
+            let resp = ui.add(egui::Link::new(
+                RichText::new(format!("[^{label}]"))
+                    .size(10.5)
+                    .color(Theme::ACCENT_BLUE),
+            ));
+            if resp.hovered() {
+                resp.on_hover_text(format!("Footnote [^{label}]"));
+            }
+        }
+        InlineSpan::InlineMath(formula) => {
+            let formatted = format_latex_math(formula);
+            egui::Frame::none()
+                .fill(Color32::from_rgb(28, 24, 38))
+                .rounding(Rounding::same(3.0))
+                .inner_margin(Margin::symmetric(4.0, 1.0))
+                .show(ui, |ui| {
+                    ui.label(
+                        RichText::new(formatted)
+                            .italics()
+                            .color(Theme::ACCENT_PURPLE),
+                    );
+                });
+        }
         InlineSpan::Wikilink {
             target,
             display,
@@ -349,6 +405,11 @@ pub enum MarkdownBlock {
     },
     CodeBlock {
         lang: String,
+        content: String,
+    },
+    MathBlock(String),
+    FootnoteDefinition {
+        label: String,
         content: String,
     },
     Blockquote(Vec<String>),
@@ -534,6 +595,56 @@ pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
             continue;
         }
 
+        // Math blocks: $$
+        if trimmed.starts_with("$$") {
+            if trimmed.len() > 4 && trimmed[2..].ends_with("$$") {
+                let math = trimmed[2..trimmed.len() - 2].trim().to_string();
+                blocks.push(MarkdownBlock::MathBlock(math));
+                continue;
+            } else {
+                let mut math_lines = Vec::new();
+                let initial = trimmed[2..].trim();
+                if !initial.is_empty() {
+                    math_lines.push(initial.to_string());
+                }
+                while let Some(next_line) = lines.next() {
+                    let next_trimmed = next_line.trim();
+                    if next_trimmed.ends_with("$$") {
+                        let ending = next_trimmed.trim_end_matches('$').trim();
+                        if !ending.is_empty() {
+                            math_lines.push(ending.to_string());
+                        }
+                        break;
+                    }
+                    math_lines.push(next_line.to_string());
+                }
+                blocks.push(MarkdownBlock::MathBlock(math_lines.join("\n")));
+                continue;
+            }
+        }
+
+        // Footnote definitions: [^label]: ...
+        if trimmed.starts_with("[^") {
+            if let Some(close_bracket) = trimmed[2..].find("]:") {
+                let label = trimmed[2..2 + close_bracket].trim().to_string();
+                let rest = trimmed[2 + close_bracket + 2..].trim().to_string();
+                let mut content_lines = vec![rest];
+                while let Some(&next_line) = lines.peek() {
+                    if next_line.starts_with("    ") || next_line.starts_with("\t") {
+                        lines.next();
+                        content_lines.push(next_line.trim().to_string());
+                    } else {
+                        break;
+                    }
+                }
+                blocks.push(MarkdownBlock::FootnoteDefinition {
+                    label,
+                    content: content_lines.join(" "),
+                });
+                continue;
+            }
+        }
+
         // 2. Empty lines
         if trimmed.is_empty() {
             continue;
@@ -681,6 +792,8 @@ pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
                 || next_trimmed.starts_with("```")
                 || next_trimmed.starts_with("~~~")
                 || next_trimmed == "---"
+                || next_trimmed.starts_with("$$")
+                || next_trimmed.starts_with("[^")
                 || is_task_list_item(next_trimmed)
                 || is_unordered_list_item(next_trimmed)
                 || is_ordered_list_item(next_trimmed)
@@ -1215,6 +1328,178 @@ pub fn render_markdown(
     render_markdown_content(ui, content, action, &mut context);
 }
 
+pub fn format_latex_math(input: &str) -> String {
+    let mut s = input.to_string();
+
+    let greek = [
+        (r"\alpha", "α"),
+        (r"\beta", "β"),
+        (r"\gamma", "γ"),
+        (r"\delta", "δ"),
+        (r"\epsilon", "ε"),
+        (r"\zeta", "ζ"),
+        (r"\eta", "η"),
+        (r"\theta", "θ"),
+        (r"\iota", "ι"),
+        (r"\kappa", "κ"),
+        (r"\lambda", "λ"),
+        (r"\mu", "μ"),
+        (r"\nu", "ν"),
+        (r"\xi", "ξ"),
+        (r"\pi", "π"),
+        (r"\rho", "ρ"),
+        (r"\sigma", "σ"),
+        (r"\tau", "τ"),
+        (r"\upsilon", "υ"),
+        (r"\phi", "φ"),
+        (r"\chi", "χ"),
+        (r"\psi", "ψ"),
+        (r"\omega", "ω"),
+        (r"\Delta", "Δ"),
+        (r"\Theta", "Θ"),
+        (r"\Lambda", "Λ"),
+        (r"\Xi", "Ξ"),
+        (r"\Pi", "Π"),
+        (r"\Sigma", "Σ"),
+        (r"\Phi", "Φ"),
+        (r"\Psi", "Ψ"),
+        (r"\Omega", "Ω"),
+    ];
+    for (from, to) in greek {
+        s = s.replace(from, to);
+    }
+
+    let symbols = [
+        (r"\times", "×"),
+        (r"\div", "÷"),
+        (r"\cdot", "·"),
+        (r"\pm", "±"),
+        (r"\mp", "∓"),
+        (r"\leq", "≤"),
+        (r"\le", "≤"),
+        (r"\geq", "≥"),
+        (r"\ge", "≥"),
+        (r"\neq", "≠"),
+        (r"\ne", "≠"),
+        (r"\approx", "≈"),
+        (r"\equiv", "≡"),
+        (r"\infty", "∞"),
+        (r"\partial", "∂"),
+        (r"\nabla", "∇"),
+        (r"\sum", "∑"),
+        (r"\prod", "∏"),
+        (r"\int", "∫"),
+        (r"\in", "∈"),
+        (r"\notin", "∉"),
+        (r"\subset", "⊂"),
+        (r"\subseteq", "⊆"),
+        (r"\cup", "∪"),
+        (r"\cap", "∩"),
+        (r"\to", "→"),
+        (r"\rightarrow", "→"),
+        (r"\leftarrow", "←"),
+        (r"\Rightarrow", "⇒"),
+        (r"\Leftarrow", "⇐"),
+        (r"\iff", "⇔"),
+        (r"\forall", "∀"),
+        (r"\exists", "∃"),
+        (r"\sqrt", "√"),
+    ];
+    for (from, to) in symbols {
+        s = s.replace(from, to);
+    }
+
+    let supers = [
+        ("^0", "⁰"),
+        ("^1", "¹"),
+        ("^2", "²"),
+        ("^3", "³"),
+        ("^4", "⁴"),
+        ("^5", "⁵"),
+        ("^6", "⁶"),
+        ("^7", "⁷"),
+        ("^8", "⁸"),
+        ("^9", "⁹"),
+        ("^+", "⁺"),
+        ("^-", "⁻"),
+        ("^n", "ⁿ"),
+        ("^x", "ˣ"),
+    ];
+    for (from, to) in supers {
+        s = s.replace(from, to);
+    }
+
+    let subs = [
+        ("_0", "₀"),
+        ("_1", "₁"),
+        ("_2", "₂"),
+        ("_3", "₃"),
+        ("_4", "₄"),
+        ("_5", "₅"),
+        ("_6", "₆"),
+        ("_7", "₇"),
+        ("_8", "₈"),
+        ("_9", "₉"),
+        ("_+", "₊"),
+        ("_-", "₋"),
+        ("_i", "ᵢ"),
+        ("_j", "ⱼ"),
+        ("_n", "ₙ"),
+    ];
+    for (from, to) in subs {
+        s = s.replace(from, to);
+    }
+
+    s
+}
+
+pub fn render_math_block(ui: &mut egui::Ui, math: &str) {
+    let formatted = format_latex_math(math);
+    ui.add_space(4.0);
+    egui::Frame::none()
+        .fill(Color32::from_rgb(24, 22, 32))
+        .rounding(Rounding::same(4.0))
+        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(50, 46, 68)))
+        .inner_margin(Margin::symmetric(16.0, 10.0))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new("fx")
+                        .size(11.0)
+                        .italics()
+                        .color(Theme::ACCENT_PURPLE),
+                );
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(formatted.trim())
+                        .monospace()
+                        .size(13.0)
+                        .color(Theme::TEXT_PRIMARY),
+                );
+            });
+        });
+    ui.add_space(4.0);
+}
+
+pub fn render_footnote_definition(
+    ui: &mut egui::Ui,
+    label: &str,
+    content: &str,
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(format!("[^{label}]:"))
+                .size(11.0)
+                .color(Theme::ACCENT_BLUE),
+        );
+        ui.add_space(4.0);
+        let spans = parse_inline_spans(content);
+        render_inline_spans(ui, &spans, action, context);
+    });
+}
+
 fn render_markdown_content(
     ui: &mut egui::Ui,
     content: &str,
@@ -1269,6 +1554,12 @@ fn render_markdown_content(
             }
             MarkdownBlock::CodeBlock { lang, content } => {
                 render_code_block(ui, &lang, &content);
+            }
+            MarkdownBlock::MathBlock(math) => {
+                render_math_block(ui, &math);
+            }
+            MarkdownBlock::FootnoteDefinition { label, content } => {
+                render_footnote_definition(ui, &label, &content, action, context);
             }
             MarkdownBlock::Blockquote(lines) => {
                 render_blockquote(ui, &lines, action, context);

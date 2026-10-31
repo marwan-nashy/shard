@@ -62,6 +62,7 @@ pub struct CanvasWorkspace {
     pub selected: Option<String>,
     pub connect_from: Option<String>,
     pub request_delete: bool,
+    pub request_open_note: Option<String>,
 }
 
 impl CanvasWorkspace {
@@ -96,7 +97,31 @@ impl CanvasWorkspace {
             selected: None,
             connect_from: None,
             request_delete: false,
+            request_open_note: None,
         })
+    }
+
+    pub fn delete_card(&mut self, id: &str) -> bool {
+        let before_nodes = self.document.nodes.len();
+        self.document.nodes.retain(|n| n.id != id);
+        self.document
+            .edges
+            .retain(|e| e.from_node != id && e.to_node != id);
+        if self.selected.as_deref() == Some(id) {
+            self.selected = None;
+        }
+        if self.connect_from.as_deref() == Some(id) {
+            self.connect_from = None;
+        }
+        self.document.nodes.len() != before_nodes
+    }
+
+    pub fn delete_selected_card(&mut self) -> bool {
+        if let Some(id) = self.selected.clone() {
+            self.delete_card(&id)
+        } else {
+            false
+        }
     }
 
     pub fn save(&mut self, root: &Path) -> io::Result<()> {
@@ -165,6 +190,10 @@ fn invalid(message: &str) -> io::Error {
 
 pub fn render(ui: &mut egui::Ui, canvas: &mut CanvasWorkspace) -> bool {
     let mut changed = false;
+
+    if ui.input(|i| i.key_pressed(egui::Key::Delete)) {
+        changed |= canvas.delete_selected_card();
+    }
 
     // Top Canvas Toolbar
     egui::Frame::none()
@@ -236,7 +265,7 @@ pub fn render(ui: &mut egui::Ui, canvas: &mut CanvasWorkspace) -> bool {
                         }
                     }
                 }
-                if ui.button("−").clicked() {
+                if ui.button("-").clicked() {
                     canvas.zoom = (canvas.zoom / 1.15).clamp(0.35, 2.5);
                 }
                 if ui.button("+").clicked() {
@@ -249,10 +278,24 @@ pub fn render(ui: &mut egui::Ui, canvas: &mut CanvasWorkspace) -> bool {
                 );
                 if canvas.is_dirty() {
                     ui.label(
-                        RichText::new("● Unsaved")
+                        RichText::new("Unsaved")
                             .size(11.0)
                             .color(Theme::ACCENT_ORANGE),
                     );
+                }
+
+                if canvas.selected.is_some() {
+                    if ui
+                        .button(
+                            RichText::new("Delete card")
+                                .size(11.0)
+                                .color(Theme::ACCENT_RED),
+                        )
+                        .on_hover_text("Delete selected card · Del")
+                        .clicked()
+                    {
+                        changed |= canvas.delete_selected_card();
+                    }
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -337,6 +380,8 @@ pub fn render(ui: &mut egui::Ui, canvas: &mut CanvasWorkspace) -> bool {
         }
     }
 
+    let mut node_to_delete = None;
+
     // Cards
     for node in &mut canvas.document.nodes {
         let size = egui::vec2(node.width, node.height) * canvas.zoom;
@@ -391,23 +436,61 @@ pub fn render(ui: &mut egui::Ui, canvas: &mut CanvasWorkspace) -> bool {
         if drag.clicked() {
             canvas.selected = Some(node.id.clone());
         }
+        if drag.double_clicked() {
+            if let Some(file) = &node.file {
+                canvas.request_open_note = Some(file.clone());
+            }
+        }
         if drag.dragged() {
             node.x += drag.drag_delta().x / canvas.zoom;
             node.y += drag.drag_delta().y / canvas.zoom;
             changed = true;
         }
 
+        let label = if node.kind == "text" {
+            "Text"
+        } else if let Some(file) = node.file.as_deref() {
+            file
+        } else {
+            &node.kind
+        };
+
         painter.text(
             header.left_center() + egui::vec2(10.0, 0.0),
             egui::Align2::LEFT_CENTER,
-            if node.kind == "text" {
-                "Text"
-            } else {
-                &node.kind
-            },
+            label,
             egui::FontId::proportional(11.5 * canvas.zoom),
             Theme::TEXT_MUTED,
         );
+
+        // Card delete button in header
+        let del_btn_size = 18.0 * canvas.zoom;
+        let del_rect = egui::Rect::from_min_size(
+            header.right_top() + egui::vec2(-del_btn_size - 4.0 * canvas.zoom, 4.0 * canvas.zoom),
+            egui::vec2(del_btn_size, header_h - 8.0 * canvas.zoom),
+        );
+        let del_resp = ui.interact(
+            del_rect,
+            egui::Id::new((&node.id, "del_card_btn")),
+            Sense::click(),
+        );
+        if del_resp.hovered() {
+            painter.rect_filled(del_rect, 3.0, Color32::from_rgb(46, 46, 46));
+        }
+        painter.text(
+            del_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "×",
+            egui::FontId::proportional(12.0 * canvas.zoom),
+            if del_resp.hovered() {
+                Theme::ACCENT_RED
+            } else {
+                Theme::TEXT_DIMMED
+            },
+        );
+        if del_resp.clicked() {
+            node_to_delete = Some(node.id.clone());
+        }
 
         if node.kind == "text" {
             let inset = 10.0 * canvas.zoom;
@@ -434,6 +517,10 @@ pub fn render(ui: &mut egui::Ui, canvas: &mut CanvasWorkspace) -> bool {
                 Theme::TEXT_MUTED,
             );
         }
+    }
+
+    if let Some(id) = node_to_delete {
+        changed |= canvas.delete_card(&id);
     }
 
     if canvas.document.nodes.is_empty() {
