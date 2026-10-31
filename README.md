@@ -12,7 +12,7 @@ Shard is a high-performance, open-source personal knowledge base designed to run
 ---
 
 ## Architectural Core Principles
-1. **Zero Electron Bloat**: Avoids bundling full Chromium + Node.js runtimes. Built on **Tauri v2 (Rust backend)** + **OS Evergreen WebView2** (~30–35 MB idle RAM vs. Obsidian's 400 MB–900 MB).
+1. **Zero Electron Bloat**: Avoids bundling full Chromium + Node.js runtimes. Built on **Tauri v2 (Rust backend)** + **OS Evergreen WebView2** (~30–35 MB idle RAM vs. 400 MB–900 MB in typical Electron apps).
 2. **100% Local-First Plain-Text Vaults**: Notes are stored directly as standard `.md` and `.canvas` files on the local filesystem. Zero cloud telemetry or hidden background daemons.
 3. **Sub-50ms Cold Startup**: Ready to write and search immediately upon launch.
 4. **Scale & Efficiency**: Handles vaults with 20,000+ markdown files effortlessly with native multithreaded Rust indexing.
@@ -23,7 +23,7 @@ Shard is a high-performance, open-source personal knowledge base designed to run
 - **Desktop Shell**: [Tauri v2](https://tauri.app/) (Native Rust backend for filesystem scanning, atomic link refactoring, and indexing)
 - **UI Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
 - **Markdown Editor**: [CodeMirror 6](https://codemirror.net/) (Modular, virtualized line rendering, memory-efficient)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) (Obsidian Dark Theme neutral charcoal `#1e1e1e` / `#161616` / `#262626` / `#7b6cd9`)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) (Distraction-free dark theme neutral charcoal `#1e1e1e` / `#161616` / `#262626` / `#7b6cd9`)
 - **Icons**: [Lucide React](https://lucide.dev/) (Geometric SVGs with zero missing-glyph or Unicode square issues)
 
 ---
@@ -63,7 +63,7 @@ Shard is a high-performance, open-source personal knowledge base designed to run
 
 ### 5. Visual Canvas (Infinite Whiteboard)
 - Infinite 2D pan/zoom whiteboard for cards and connecting arrows.
-- Compatible with Obsidian `.canvas` JSON structure.
+- Compatible with the standard `.canvas` JSON specification.
 - Save, add cards, drag, and organize visual mindmaps directly on disk.
 
 ### 6. Quick Switcher (`Ctrl+O`) & Command Palette (`Ctrl+P`)
