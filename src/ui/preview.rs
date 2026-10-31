@@ -1,10 +1,16 @@
+use super::attachments::{resolve_attachment, AttachmentCache, ImageStatus};
+use super::embeds::{EmbedLoad, NoteEmbedCache};
 use super::theme::Theme;
+use crate::vault::Vault;
 use egui::{Color32, Margin, RichText, Rounding, Stroke};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub enum MarkdownAction {
     OpenWikilink(String),
+    OpenHeadingWikilink { target: String, heading: String },
     OpenUrl(String),
+    ToggleTask(usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,8 +20,51 @@ pub enum InlineSpan {
     Italic(String),
     Code(String),
     Strikethrough(String),
-    Wikilink { target: String, display: String },
-    Url { text: String, url: String },
+    Wikilink {
+        target: String,
+        display: String,
+        heading: Option<String>,
+    },
+    Url {
+        text: String,
+        url: String,
+    },
+    Image {
+        alt: String,
+        target: String,
+    },
+    NoteEmbed {
+        target: String,
+        heading: Option<String>,
+    },
+}
+
+pub struct MarkdownRenderContext<'a> {
+    note_path: PathBuf,
+    vault_root: &'a Path,
+    vault: &'a Vault,
+    attachments: &'a mut AttachmentCache,
+    note_embeds: &'a mut NoteEmbedCache,
+    embed_depth: usize,
+    embed_stack: Vec<PathBuf>,
+    tasks_interactive: bool,
+}
+
+fn is_supported_image_target(target: &str) -> bool {
+    let path = target
+        .trim()
+        .trim_matches(['<', '>'])
+        .split(['#', '?'])
+        .next()
+        .unwrap_or_default();
+    Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("png")
+                || extension.eq_ignore_ascii_case("jpg")
+                || extension.eq_ignore_ascii_case("jpeg")
+        })
 }
 
 pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
@@ -31,7 +80,55 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
     let mut remaining = input;
 
     while !remaining.is_empty() {
-        // 1. Wikilink [[...]]
+        // 1. Obsidian image embed ![[image.png]]
+        if remaining.starts_with("![[") {
+            if let Some(end) = remaining[3..].find("]]") {
+                let parsed = crate::wikilinks::parse_wikilink_content(&remaining[3..3 + end]);
+                if is_supported_image_target(&parsed.target) {
+                    flush_text(&mut spans, &mut current_text);
+                    spans.push(InlineSpan::Image {
+                        alt: parsed.display,
+                        target: parsed.target,
+                    });
+                    remaining = &remaining[3 + end + 2..];
+                    continue;
+                } else {
+                    flush_text(&mut spans, &mut current_text);
+                    spans.push(InlineSpan::NoteEmbed {
+                        target: parsed.target,
+                        heading: parsed.heading,
+                    });
+                    remaining = &remaining[3 + end + 2..];
+                    continue;
+                }
+            }
+        }
+
+        // 2. Markdown image ![alt](image.png)
+        if remaining.starts_with("![") {
+            if let Some(alt_end) = remaining[2..].find("](") {
+                let alt = &remaining[2..2 + alt_end];
+                let after_alt = &remaining[2 + alt_end + 2..];
+                if let Some(target_end) = after_alt.find(')') {
+                    let target = after_alt[..target_end]
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .trim_matches(['<', '>']);
+                    if is_supported_image_target(target) {
+                        flush_text(&mut spans, &mut current_text);
+                        spans.push(InlineSpan::Image {
+                            alt: alt.to_string(),
+                            target: target.to_string(),
+                        });
+                        remaining = &after_alt[target_end + 1..];
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // 3. Wikilink [[...]]
         if remaining.starts_with("[[") {
             if let Some(end) = remaining[2..].find("]]") {
                 let inner = &remaining[2..2 + end];
@@ -41,6 +138,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
                     spans.push(InlineSpan::Wikilink {
                         target: parsed.target,
                         display: parsed.display,
+                        heading: parsed.heading,
                     });
                     remaining = &remaining[2 + end + 2..];
                     continue;
@@ -48,7 +146,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
             }
         }
 
-        // 2. Markdown link [text](url)
+        // 4. Markdown link [text](url)
         if remaining.starts_with('[') {
             if let Some(bracket_end) = remaining[1..].find(']') {
                 let text_inside = &remaining[1..1 + bracket_end];
@@ -68,7 +166,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
             }
         }
 
-        // 3. Inline code `...`
+        // 5. Inline code `...`
         if remaining.starts_with('`') {
             if let Some(end) = remaining[1..].find('`') {
                 let code_text = &remaining[1..1 + end];
@@ -79,7 +177,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
             }
         }
 
-        // 4. Bold **...** or __...__
+        // 6. Bold **...** or __...__
         if remaining.starts_with("**") || remaining.starts_with("__") {
             let delim = &remaining[..2];
             if let Some(end) = remaining[2..].find(delim) {
@@ -91,7 +189,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
             }
         }
 
-        // 5. Strikethrough ~~...~~
+        // 7. Strikethrough ~~...~~
         if remaining.starts_with("~~") {
             if let Some(end) = remaining[2..].find("~~") {
                 let strike_text = &remaining[2..2 + end];
@@ -102,7 +200,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
             }
         }
 
-        // 6. Italic *...* or _..._
+        // 8. Italic *...* or _..._
         if remaining.starts_with('*') || remaining.starts_with('_') {
             let delim = &remaining[..1];
             if let Some(end) = remaining[1..].find(delim) {
@@ -116,7 +214,7 @@ pub fn parse_inline_spans(input: &str) -> Vec<InlineSpan> {
             }
         }
 
-        // 7. Consume normal character
+        // 9. Consume normal character
         if let Some(c) = remaining.chars().next() {
             current_text.push(c);
             remaining = &remaining[c.len_utf8()..];
@@ -134,6 +232,7 @@ pub fn render_single_span(
     span: &InlineSpan,
     action: &mut Option<MarkdownAction>,
     is_task_checked: bool,
+    context: &mut MarkdownRenderContext<'_>,
 ) {
     match span {
         InlineSpan::Text(t) => {
@@ -179,12 +278,22 @@ pub fn render_single_span(
         InlineSpan::Strikethrough(t) => {
             ui.label(RichText::new(t).strikethrough().color(Theme::TEXT_MUTED));
         }
-        InlineSpan::Wikilink { target, display } => {
+        InlineSpan::Wikilink {
+            target,
+            display,
+            heading,
+        } => {
             let resp = ui.add(egui::Link::new(
                 RichText::new(display).color(Theme::ACCENT_BLUE).underline(),
             ));
             if resp.clicked() {
-                *action = Some(MarkdownAction::OpenWikilink(target.clone()));
+                *action = Some(match heading {
+                    Some(heading) => MarkdownAction::OpenHeadingWikilink {
+                        target: target.clone(),
+                        heading: heading.clone(),
+                    },
+                    None => MarkdownAction::OpenWikilink(target.clone()),
+                });
             }
             if resp.hovered() {
                 resp.on_hover_text(format!("Open note: [[{}]]", target));
@@ -201,6 +310,12 @@ pub fn render_single_span(
                 resp.on_hover_text(url);
             }
         }
+        InlineSpan::Image { alt, target } => {
+            render_image(ui, alt, target, context, 320.0);
+        }
+        InlineSpan::NoteEmbed { target, heading } => {
+            render_note_embed(ui, target, heading.as_deref(), action, context);
+        }
     }
 }
 
@@ -208,25 +323,59 @@ pub fn render_inline_spans(
     ui: &mut egui::Ui,
     spans: &[InlineSpan],
     action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
 ) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         for span in spans {
-            render_single_span(ui, span, action, false);
+            render_single_span(ui, span, action, false, context);
         }
     });
 }
 
 #[derive(Debug, Clone)]
 pub enum MarkdownBlock {
-    Heading { level: u8, text: String },
-    CodeBlock { lang: String, content: String },
+    Properties {
+        values: Vec<(String, String)>,
+        tags: Vec<String>,
+    },
+    Heading {
+        level: u8,
+        text: String,
+    },
+    Image {
+        alt: String,
+        target: String,
+    },
+    CodeBlock {
+        lang: String,
+        content: String,
+    },
     Blockquote(Vec<String>),
+    Callout {
+        kind: String,
+        title: String,
+        lines: Vec<String>,
+        foldable: bool,
+        collapsed: bool,
+    },
     UnorderedList(Vec<String>),
     OrderedList(Vec<(usize, String)>),
     TaskList(Vec<(bool, String)>),
+    Table {
+        headers: Vec<String>,
+        alignments: Vec<TableAlignment>,
+        rows: Vec<Vec<String>>,
+    },
     HorizontalRule,
     Paragraph(String),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TableAlignment {
+    Left,
+    Center,
+    Right,
 }
 
 fn is_task_list_item(s: &str) -> bool {
@@ -269,19 +418,111 @@ fn extract_ordered_item(s: &str) -> (usize, String) {
     }
 }
 
+fn parse_standalone_image(line: &str) -> Option<(String, String)> {
+    if let Some(inner) = line.strip_prefix("![[") {
+        if let Some(inner) = inner.strip_suffix("]]") {
+            let parsed = crate::wikilinks::parse_wikilink_content(inner);
+            return Some((parsed.display, parsed.target));
+        }
+    }
+
+    let inner = line.strip_prefix("![")?;
+    let close_alt = inner.find("](")?;
+    let alt = inner[..close_alt].to_string();
+    let target = inner[close_alt + 2..]
+        .strip_suffix(')')?
+        .split_whitespace()
+        .next()?
+        .trim_matches(['<', '>'])
+        .to_string();
+    Some((alt, target))
+}
+
+fn parse_table_row(line: &str) -> Option<Vec<String>> {
+    if !line.contains('|') {
+        return None;
+    }
+    let mut cells = Vec::new();
+    let mut current = String::new();
+    let mut escaped = false;
+    let mut in_code = false;
+    let mut in_wikilink = false;
+    let chars: Vec<char> = line.trim().chars().collect();
+    for (index, ch) in chars.iter().copied().enumerate() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == '`' {
+            in_code = !in_code;
+            current.push(ch);
+        } else if ch == '[' && chars.get(index + 1) == Some(&'[') {
+            in_wikilink = true;
+            current.push(ch);
+        } else if ch == ']' && chars.get(index + 1) == Some(&']') {
+            in_wikilink = false;
+            current.push(ch);
+        } else if ch == '|' && !in_code && !in_wikilink {
+            if index != 0 {
+                cells.push(current.trim().to_string());
+            }
+            current.clear();
+        } else {
+            current.push(ch);
+        }
+    }
+    if !current.trim().is_empty() || !line.trim().ends_with('|') {
+        cells.push(current.trim().to_string());
+    }
+    (!cells.is_empty()).then_some(cells)
+}
+
+fn parse_table_delimiter(line: &str, columns: usize) -> Option<Vec<TableAlignment>> {
+    let cells = parse_table_row(line)?;
+    if cells.len() != columns {
+        return None;
+    }
+    cells
+        .iter()
+        .map(|cell| {
+            let value = cell.trim();
+            if value.len() < 3
+                || !value.contains('-')
+                || !value.chars().all(|c| c == '-' || c == ':')
+            {
+                return None;
+            }
+            Some(match (value.starts_with(':'), value.ends_with(':')) {
+                (true, true) => TableAlignment::Center,
+                (false, true) => TableAlignment::Right,
+                _ => TableAlignment::Left,
+            })
+        })
+        .collect()
+}
+
 pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
     let mut blocks = Vec::new();
-    let mut lines = content.lines().peekable();
+    let metadata = crate::metadata::parse_note(content);
+    if !metadata.properties.is_empty() || !metadata.tags.is_empty() {
+        blocks.push(MarkdownBlock::Properties {
+            values: metadata.properties,
+            tags: metadata.tags,
+        });
+    }
+    let mut lines = metadata.body.lines().peekable();
 
     while let Some(line) = lines.next() {
         let trimmed = line.trim();
 
         // 1. Code blocks: ```
-        if trimmed.starts_with("```") {
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            let fence = &trimmed[..3];
             let lang = trimmed[3..].trim().to_string();
             let mut code_lines = Vec::new();
             while let Some(next_line) = lines.next() {
-                if next_line.trim().starts_with("```") {
+                if next_line.trim().starts_with(fence) {
                     break;
                 }
                 code_lines.push(next_line);
@@ -317,6 +558,41 @@ pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
             }
         }
 
+        if let Some((alt, target)) = parse_standalone_image(trimmed) {
+            blocks.push(MarkdownBlock::Image { alt, target });
+            continue;
+        }
+
+        // GFM tables: header row, alignment delimiter, then pipe separated rows.
+        if let Some(headers) = parse_table_row(trimmed) {
+            if let Some(delimiter) = lines
+                .peek()
+                .and_then(|next| parse_table_delimiter(next.trim(), headers.len()))
+            {
+                lines.next();
+                let mut rows = Vec::new();
+                while let Some(next_line) = lines.peek() {
+                    let next = next_line.trim();
+                    if next.is_empty() {
+                        break;
+                    }
+                    let Some(mut row) = parse_table_row(next) else {
+                        break;
+                    };
+                    lines.next();
+                    row.resize(headers.len(), String::new());
+                    row.truncate(headers.len());
+                    rows.push(row);
+                }
+                blocks.push(MarkdownBlock::Table {
+                    headers,
+                    alignments: delimiter,
+                    rows,
+                });
+                continue;
+            }
+        }
+
         // 5. Blockquotes: >
         if trimmed.starts_with('>') {
             let mut quote_lines = vec![trimmed.trim_start_matches('>').trim().to_string()];
@@ -329,7 +605,17 @@ pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
                     break;
                 }
             }
-            blocks.push(MarkdownBlock::Blockquote(quote_lines));
+            if let Some((kind, title, foldable, collapsed)) = parse_callout_title(&quote_lines[0]) {
+                blocks.push(MarkdownBlock::Callout {
+                    kind,
+                    title,
+                    lines: quote_lines.into_iter().skip(1).collect(),
+                    foldable,
+                    collapsed,
+                });
+            } else {
+                blocks.push(MarkdownBlock::Blockquote(quote_lines));
+            }
             continue;
         }
 
@@ -389,9 +675,11 @@ pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
         while let Some(&next_line) = lines.peek() {
             let next_trimmed = next_line.trim();
             if next_trimmed.is_empty()
+                || next_trimmed.contains('|')
                 || next_trimmed.starts_with('#')
                 || next_trimmed.starts_with('>')
                 || next_trimmed.starts_with("```")
+                || next_trimmed.starts_with("~~~")
                 || next_trimmed == "---"
                 || is_task_list_item(next_trimmed)
                 || is_unordered_list_item(next_trimmed)
@@ -406,6 +694,30 @@ pub fn parse_markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
     }
 
     blocks
+}
+
+fn parse_callout_title(line: &str) -> Option<(String, String, bool, bool)> {
+    let trimmed = line.trim();
+    let value = trimmed.strip_prefix("[!")?;
+    let end = value.find(']')?;
+    let kind = value[..end].trim().to_lowercase();
+    if kind.is_empty() {
+        return None;
+    }
+    let suffix = value[end + 1..].trim();
+    let collapsed = suffix.starts_with('-');
+    let foldable = collapsed || suffix.starts_with('+');
+    let custom_title = if foldable { suffix[1..].trim() } else { suffix };
+    let title = if custom_title.is_empty() {
+        let mut chars = kind.chars();
+        chars
+            .next()
+            .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+            .unwrap_or_else(|| "Note".to_string())
+    } else {
+        custom_title.to_string()
+    };
+    Some((kind, title, foldable, collapsed))
 }
 
 pub fn render_heading(ui: &mut egui::Ui, level: u8, text: &str) {
@@ -462,7 +774,12 @@ pub fn render_code_block(ui: &mut egui::Ui, lang: &str, content: &str) {
         });
 }
 
-pub fn render_blockquote(ui: &mut egui::Ui, lines: &[String], action: &mut Option<MarkdownAction>) {
+pub fn render_blockquote(
+    ui: &mut egui::Ui,
+    lines: &[String],
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
     ui.horizontal(|ui| {
         let bar_width = 3.0;
         let bar_height = (22.0 * lines.len().max(1) as f32).max(24.0);
@@ -475,7 +792,7 @@ pub fn render_blockquote(ui: &mut egui::Ui, lines: &[String], action: &mut Optio
         ui.vertical(|ui| {
             for line in lines {
                 let spans = parse_inline_spans(line);
-                render_inline_spans(ui, &spans, action);
+                render_inline_spans(ui, &spans, action, context);
             }
         });
     });
@@ -486,6 +803,7 @@ pub fn render_unordered_list(
     ui: &mut egui::Ui,
     items: &[String],
     action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
 ) {
     for item in items {
         ui.horizontal_wrapped(|ui| {
@@ -493,7 +811,7 @@ pub fn render_unordered_list(
             ui.label(RichText::new("•").color(Theme::ACCENT_PURPLE).strong());
             let spans = parse_inline_spans(item);
             for span in spans {
-                render_single_span(ui, &span, action, false);
+                render_single_span(ui, &span, action, false, context);
             }
         });
     }
@@ -503,6 +821,7 @@ pub fn render_ordered_list(
     ui: &mut egui::Ui,
     items: &[(usize, String)],
     action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
 ) {
     for (idx, item) in items {
         ui.horizontal_wrapped(|ui| {
@@ -514,7 +833,7 @@ pub fn render_ordered_list(
             );
             let spans = parse_inline_spans(item);
             for span in spans {
-                render_single_span(ui, &span, action, false);
+                render_single_span(ui, &span, action, false, context);
             }
         });
     }
@@ -523,7 +842,10 @@ pub fn render_ordered_list(
 pub fn render_task_list(
     ui: &mut egui::Ui,
     items: &[(bool, String)],
+    task_ordinal: &mut usize,
+    interactive: bool,
     action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
 ) {
     for (checked, text) in items {
         ui.horizontal_wrapped(|ui| {
@@ -534,36 +856,456 @@ pub fn render_task_list(
             } else {
                 Theme::ACCENT_PURPLE
             };
-            ui.label(RichText::new(symbol).color(color).size(14.0));
+            if interactive {
+                if ui
+                    .small_button(RichText::new(symbol).color(color).size(14.0))
+                    .clicked()
+                {
+                    *action = Some(MarkdownAction::ToggleTask(*task_ordinal));
+                }
+            } else {
+                ui.label(RichText::new(symbol).color(color).size(14.0));
+            }
             let spans = parse_inline_spans(text);
             for span in spans {
-                render_single_span(ui, &span, action, *checked);
+                render_single_span(ui, &span, action, *checked, context);
             }
         });
+        *task_ordinal += 1;
     }
 }
 
-pub fn render_markdown(ui: &mut egui::Ui, content: &str, action: &mut Option<MarkdownAction>) {
+fn render_markdown_table(
+    ui: &mut egui::Ui,
+    headers: &[String],
+    alignments: &[TableAlignment],
+    rows: &[Vec<String>],
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
+    let columns = headers.len().max(1);
+    let cell_width = (ui.available_width() / columns as f32).clamp(100.0, 260.0);
+    let grid_id = ui.next_auto_id();
+    egui::ScrollArea::horizontal()
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            egui::Grid::new(grid_id).spacing([0.0, 0.0]).show(ui, |ui| {
+                for (index, header) in headers.iter().enumerate() {
+                    render_table_cell(
+                        ui,
+                        header,
+                        cell_width,
+                        true,
+                        false,
+                        alignments
+                            .get(index)
+                            .copied()
+                            .unwrap_or(TableAlignment::Left),
+                        action,
+                        context,
+                    );
+                }
+                ui.end_row();
+                for (row_index, row) in rows.iter().enumerate() {
+                    for column in 0..columns {
+                        let value = row.get(column).map(String::as_str).unwrap_or_default();
+                        render_table_cell(
+                            ui,
+                            value,
+                            cell_width,
+                            false,
+                            row_index % 2 == 1,
+                            alignments
+                                .get(column)
+                                .copied()
+                                .unwrap_or(TableAlignment::Left),
+                            action,
+                            context,
+                        );
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    ui.add_space(8.0);
+}
+
+fn render_table_cell(
+    ui: &mut egui::Ui,
+    text: &str,
+    width: f32,
+    header: bool,
+    alternate: bool,
+    alignment: TableAlignment,
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
+    let fill = if header {
+        Theme::BG_CARD
+    } else if alternate {
+        Theme::BG_PRIMARY
+    } else {
+        Theme::BG_SECONDARY
+    };
+    egui::Frame::none()
+        .fill(fill)
+        .stroke(Stroke::new(0.5_f32, Theme::BORDER))
+        .inner_margin(Margin::symmetric(8.0, 6.0))
+        .show(ui, |ui| {
+            ui.set_min_width(width);
+            ui.set_max_width(width);
+            let align = match alignment {
+                TableAlignment::Left => egui::Align::Min,
+                TableAlignment::Center => egui::Align::Center,
+                TableAlignment::Right => egui::Align::Max,
+            };
+            ui.with_layout(egui::Layout::top_down(align), |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for span in parse_inline_spans(text) {
+                        if header {
+                            if let InlineSpan::Text(value) = span {
+                                render_single_span(
+                                    ui,
+                                    &InlineSpan::Bold(value),
+                                    action,
+                                    false,
+                                    context,
+                                );
+                            } else {
+                                render_single_span(ui, &span, action, false, context);
+                            }
+                        } else {
+                            render_single_span(ui, &span, action, false, context);
+                        }
+                    }
+                });
+            });
+        });
+}
+
+fn render_callout(
+    ui: &mut egui::Ui,
+    kind: &str,
+    title: &str,
+    lines: &[String],
+    foldable: bool,
+    collapsed: bool,
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
+    let accent = match kind {
+        "tip" | "success" | "done" | "check" => Theme::ACCENT_GREEN,
+        "warning" | "caution" | "attention" => Theme::ACCENT_ORANGE,
+        "danger" | "failure" | "error" | "bug" => Theme::ACCENT_RED,
+        "question" | "help" | "faq" => Theme::ACCENT_BLUE,
+        _ => Theme::ACCENT_PURPLE,
+    };
+    let icon = match kind {
+        "tip" => "✦",
+        "warning" | "caution" | "attention" => "!",
+        "danger" | "failure" | "error" => "×",
+        "question" | "help" | "faq" => "?",
+        "success" | "done" | "check" => "✓",
+        "bug" => "⚑",
+        _ => "●",
+    };
+    egui::Frame::none()
+        .fill(Theme::BG_SECONDARY)
+        .stroke(Stroke::new(1.0_f32, accent))
+        .rounding(Rounding::same(7.0))
+        .inner_margin(Margin::symmetric(10.0, 7.0))
+        .show(ui, |ui| {
+            if foldable {
+                egui::CollapsingHeader::new(
+                    RichText::new(format!("{icon}  {title}"))
+                        .strong()
+                        .color(accent),
+                )
+                .id_salt(ui.next_auto_id())
+                .default_open(!collapsed)
+                .show(ui, |ui| render_callout_lines(ui, lines, action, context));
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(icon).strong().color(accent));
+                    ui.label(RichText::new(title).strong().color(accent));
+                });
+                render_callout_lines(ui, lines, action, context);
+            }
+        });
+    ui.add_space(6.0);
+}
+
+fn render_note_embed(
+    ui: &mut egui::Ui,
+    target: &str,
+    heading: Option<&str>,
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
+    let Some(note) = crate::wikilinks::resolve_wikilink(context.vault, target) else {
+        ui.label(
+            RichText::new(format!("Note embed unavailable: [[{target}]]"))
+                .color(Theme::ACCENT_ORANGE),
+        );
+        return;
+    };
+    let path = note.abs_path.clone();
+    let title = note.title.clone();
+    let cycle = context.embed_stack.contains(&path);
+    egui::Frame::none()
+        .fill(Theme::BG_SECONDARY)
+        .stroke(Stroke::new(1.0_f32, Theme::BORDER))
+        .rounding(Rounding::same(7.0))
+        .inner_margin(Margin::symmetric(10.0, 7.0))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let link = ui.add(egui::Link::new(
+                    RichText::new(&title).strong().color(Theme::ACCENT_BLUE),
+                ));
+                if link.clicked() {
+                    *action = Some(match heading {
+                        Some(heading) => MarkdownAction::OpenHeadingWikilink {
+                            target: target.to_string(),
+                            heading: heading.to_string(),
+                        },
+                        None => MarkdownAction::OpenWikilink(target.to_string()),
+                    });
+                }
+                ui.label(
+                    RichText::new(if heading.is_some() {
+                        "HEADING EMBED"
+                    } else {
+                        "NOTE EMBED"
+                    })
+                    .size(9.0)
+                    .color(Theme::TEXT_DIMMED),
+                );
+            });
+            if cycle {
+                ui.label(
+                    RichText::new("Circular embed skipped.")
+                        .size(11.0)
+                        .color(Theme::TEXT_MUTED),
+                );
+                return;
+            }
+            if context.embed_depth >= 3 {
+                ui.label(
+                    RichText::new("Embed depth limit reached.")
+                        .size(11.0)
+                        .color(Theme::TEXT_MUTED),
+                );
+                return;
+            }
+            let source = match context.note_embeds.load(&path, context.vault_root) {
+                EmbedLoad::Ready(content) => content,
+                EmbedLoad::Loading => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new("Loading embedded note…").color(Theme::TEXT_MUTED));
+                    });
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(60));
+                    return;
+                }
+                EmbedLoad::Failed(error) => {
+                    ui.label(
+                        RichText::new(format!("Could not embed note: {error}"))
+                            .size(11.0)
+                            .color(Theme::ACCENT_ORANGE),
+                    );
+                    return;
+                }
+            };
+            let content: std::borrow::Cow<'_, str> = if let Some(heading) = heading {
+                match extract_heading_section(&source, heading) {
+                    Some(content) => std::borrow::Cow::Owned(content),
+                    None => {
+                        ui.label(
+                            RichText::new(format!("Heading not found: {heading}"))
+                                .size(11.0)
+                                .color(Theme::TEXT_MUTED),
+                        );
+                        return;
+                    }
+                }
+            } else {
+                std::borrow::Cow::Borrowed(source.as_ref())
+            };
+            let previous_path = context.note_path.clone();
+            let previous_task_interactive = context.tasks_interactive;
+            context.note_path = path.clone();
+            context.tasks_interactive = false;
+            context.embed_depth += 1;
+            context.embed_stack.push(path.clone());
+            render_markdown_content(ui, &content, action, context);
+            context.embed_stack.pop();
+            context.embed_depth -= 1;
+            context.tasks_interactive = previous_task_interactive;
+            context.note_path = previous_path;
+        });
+    ui.add_space(6.0);
+}
+
+fn extract_heading_section(content: &str, requested: &str) -> Option<String> {
+    let body = crate::metadata::parse_note(content).body;
+    let lines: Vec<_> = body.lines().collect();
+    let mut start = None;
+    let mut level = 0;
+    for (index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let hashes = trimmed.chars().take_while(|ch| *ch == '#').count();
+        if (1..=6).contains(&hashes) && trimmed[hashes..].starts_with(' ') {
+            let title = trimmed[hashes..].trim().trim_end_matches('#').trim();
+            if title.eq_ignore_ascii_case(requested.trim()) {
+                start = Some(index);
+                level = hashes;
+                break;
+            }
+        }
+    }
+    let start = start?;
+    let end = lines
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .find_map(|(index, line)| {
+            let trimmed = line.trim_start();
+            let hashes = trimmed.chars().take_while(|ch| *ch == '#').count();
+            ((1..=level).contains(&hashes) && trimmed[hashes..].starts_with(' ')).then_some(index)
+        })
+        .unwrap_or(lines.len());
+    Some(lines[start..end].join("\n"))
+}
+
+fn render_callout_lines(
+    ui: &mut egui::Ui,
+    lines: &[String],
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
+    for line in lines {
+        if line.is_empty() {
+            ui.add_space(3.0);
+        } else {
+            render_inline_spans(ui, &parse_inline_spans(line), action, context);
+        }
+    }
+}
+
+pub fn render_markdown(
+    ui: &mut egui::Ui,
+    content: &str,
+    action: &mut Option<MarkdownAction>,
+    note_path: &std::path::Path,
+    vault: &Vault,
+    attachments: &mut super::attachments::AttachmentCache,
+    note_embeds: &mut NoteEmbedCache,
+) {
+    let mut context = MarkdownRenderContext {
+        note_path: note_path.to_path_buf(),
+        vault_root: &vault.root_path,
+        vault,
+        attachments,
+        note_embeds,
+        embed_depth: 0,
+        embed_stack: vec![note_path.to_path_buf()],
+        tasks_interactive: true,
+    };
+    render_markdown_content(ui, content, action, &mut context);
+}
+
+fn render_markdown_content(
+    ui: &mut egui::Ui,
+    content: &str,
+    action: &mut Option<MarkdownAction>,
+    context: &mut MarkdownRenderContext<'_>,
+) {
     let blocks = parse_markdown_blocks(content);
+    let mut task_ordinal = 0;
     for block in blocks {
         match block {
+            MarkdownBlock::Properties { values, tags } => {
+                egui::Frame::none()
+                    .fill(Theme::BG_SECONDARY)
+                    .rounding(Rounding::same(8.0))
+                    .inner_margin(Margin::symmetric(12.0, 8.0))
+                    .stroke(Stroke::new(1.0_f32, Theme::BORDER))
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new("PROPERTIES")
+                                .strong()
+                                .size(9.0)
+                                .color(Theme::TEXT_DIMMED),
+                        );
+                        for (key, value) in values {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(RichText::new(key).size(11.0).color(Theme::TEXT_MUTED));
+                                ui.label(
+                                    RichText::new(value).size(11.0).color(Theme::TEXT_PRIMARY),
+                                );
+                            });
+                        }
+                        if !tags.is_empty() {
+                            ui.horizontal_wrapped(|ui| {
+                                for tag in tags {
+                                    ui.label(
+                                        RichText::new(format!("#{tag}"))
+                                            .size(11.0)
+                                            .color(Theme::ACCENT_GREEN)
+                                            .background_color(Theme::BG_CARD),
+                                    );
+                                }
+                            });
+                        }
+                    });
+                ui.add_space(8.0);
+            }
             MarkdownBlock::Heading { level, text } => {
                 render_heading(ui, level, &text);
+            }
+            MarkdownBlock::Image { alt, target } => {
+                render_image(ui, &alt, &target, context, 560.0);
             }
             MarkdownBlock::CodeBlock { lang, content } => {
                 render_code_block(ui, &lang, &content);
             }
             MarkdownBlock::Blockquote(lines) => {
-                render_blockquote(ui, &lines, action);
+                render_blockquote(ui, &lines, action, context);
+            }
+            MarkdownBlock::Callout {
+                kind,
+                title,
+                lines,
+                foldable,
+                collapsed,
+            } => {
+                render_callout(
+                    ui, &kind, &title, &lines, foldable, collapsed, action, context,
+                );
             }
             MarkdownBlock::UnorderedList(items) => {
-                render_unordered_list(ui, &items, action);
+                render_unordered_list(ui, &items, action, context);
             }
             MarkdownBlock::OrderedList(items) => {
-                render_ordered_list(ui, &items, action);
+                render_ordered_list(ui, &items, action, context);
             }
             MarkdownBlock::TaskList(items) => {
-                render_task_list(ui, &items, action);
+                render_task_list(
+                    ui,
+                    &items,
+                    &mut task_ordinal,
+                    context.tasks_interactive,
+                    action,
+                    context,
+                );
+            }
+            MarkdownBlock::Table {
+                headers,
+                alignments,
+                rows,
+            } => {
+                render_markdown_table(ui, &headers, &alignments, &rows, action, context);
             }
             MarkdownBlock::HorizontalRule => {
                 ui.add_space(4.0);
@@ -572,9 +1314,45 @@ pub fn render_markdown(ui: &mut egui::Ui, content: &str, action: &mut Option<Mar
             }
             MarkdownBlock::Paragraph(text) => {
                 let spans = parse_inline_spans(&text);
-                render_inline_spans(ui, &spans, action);
+                render_inline_spans(ui, &spans, action, context);
                 ui.add_space(4.0);
             }
         }
     }
+}
+
+fn render_image(
+    ui: &mut egui::Ui,
+    alt: &str,
+    target: &str,
+    context: &mut MarkdownRenderContext<'_>,
+    max_height: f32,
+) {
+    let Some(path) = resolve_attachment(&context.note_path, context.vault_root, target) else {
+        ui.label(RichText::new(format!("Image unavailable: {target}")).color(Theme::ACCENT_ORANGE));
+        return;
+    };
+    match context.attachments.get_or_load(ui.ctx(), &path) {
+        ImageStatus::Ready(texture) => {
+            let image = egui::Image::new((texture.id(), texture.size_vec2()))
+                .max_size(egui::vec2(ui.available_width().min(800.0), max_height))
+                .maintain_aspect_ratio(true);
+            ui.add(image).on_hover_text(&path.display().to_string());
+        }
+        ImageStatus::Loading => {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(format!("Loading image: {alt}")).color(Theme::TEXT_MUTED));
+            });
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(50));
+        }
+        ImageStatus::Failed(error) => {
+            ui.label(RichText::new(format!("{alt}: {error}")).color(Theme::ACCENT_ORANGE));
+        }
+    }
+    if !alt.is_empty() {
+        ui.label(RichText::new(alt).size(11.0).color(Theme::TEXT_DIMMED));
+    }
+    ui.add_space(6.0);
 }
