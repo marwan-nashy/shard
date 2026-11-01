@@ -3,6 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+pub mod mcp;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileNode {
     pub name: String,
@@ -88,7 +90,7 @@ fn get_config_file_path() -> Option<PathBuf> {
     })
 }
 
-fn load_app_config() -> AppConfig {
+pub fn load_app_config() -> AppConfig {
     if let Some(path) = get_config_file_path() {
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
@@ -593,6 +595,57 @@ fn get_note_backlinks(vault_path: String, note_title: String) -> Result<Backlink
     })
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct McpConfigInfo {
+    pub executable_path: String,
+    pub vault_path: Option<String>,
+    pub claude_config_snippet: String,
+    pub cursor_config_snippet: String,
+}
+
+#[tauri::command]
+fn get_mcp_config() -> McpConfigInfo {
+    let current_exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "shard.exe".to_string());
+    let config = load_app_config();
+    let vault = config.last_vault.clone();
+
+    let v_path = vault.as_deref().unwrap_or("PATH_TO_YOUR_VAULT");
+    let claude_snippet = format!(
+        r#"{{
+  "mcpServers": {{
+    "shard": {{
+      "command": "{}",
+      "args": ["--mcp", "--vault", "{}"]
+    }}
+  }}
+}}"#,
+        current_exe.replace('\\', "\\\\"),
+        v_path.replace('\\', "\\\\")
+    );
+
+    let cursor_snippet = format!(
+        r#"{{
+  "mcpServers": {{
+    "shard": {{
+      "command": "{}",
+      "args": ["--mcp", "--vault", "{}"]
+    }}
+  }}
+}}"#,
+        current_exe.replace('\\', "\\\\"),
+        v_path.replace('\\', "\\\\")
+    );
+
+    McpConfigInfo {
+        executable_path: current_exe,
+        vault_path: vault,
+        claude_config_snippet: claude_snippet,
+        cursor_config_snippet: cursor_snippet,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -613,7 +666,8 @@ pub fn run() {
             rename_note_with_refactor,
             search_vault,
             get_vault_graph,
-            get_note_backlinks
+            get_note_backlinks,
+            get_mcp_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running Shard application");

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, FileText, Download } from "lucide-react";
+import { generateCalendarIcs, downloadIcsFile } from "../utils/icsExport";
 
 interface CalendarPaneProps {
   allNotes: { title: string; path: string }[];
@@ -98,6 +99,20 @@ export const CalendarPane: React.FC<CalendarPaneProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              const events = Array.from(notesByDate.entries()).map(([dateStr, path]) => {
+                const title = path.split(/[/\\]/).pop()?.replace(/\.md$/, "") || dateStr;
+                return { dateStr, title, path };
+              });
+              const ics = generateCalendarIcs(events);
+              downloadIcsFile("shard-daily-notes.ics", ics);
+            }}
+            className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover transition-colors"
+            title="Export Daily Notes to iCalendar (.ics)"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={goToToday}
             className="px-1.5 py-0.5 text-[10px] rounded font-mono text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"

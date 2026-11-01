@@ -30,6 +30,8 @@ import {
   FileDown,
   Columns3,
   Radio,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 import { FeatureFlags } from "../types";
@@ -53,6 +55,11 @@ interface FormattingToolbarProps {
   onOpenAudioMemo?: () => void;
   onToggleKanban?: () => void;
   isKanban?: boolean;
+  isEncrypted?: boolean;
+  isNoteUnlocked?: boolean;
+  onOpenEncryptModal?: () => void;
+  onRelockNote?: () => void;
+  onRemoveEncryption?: () => void;
 }
 
 export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
@@ -74,6 +81,11 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
   onOpenAudioMemo,
   onToggleKanban,
   isKanban = false,
+  isEncrypted = false,
+  isNoteUnlocked = false,
+  onOpenEncryptModal,
+  onRelockNote,
+  onRemoveEncryption,
 }) => {
   const [calloutMenuOpen, setCalloutMenuOpen] = useState(false);
   const [headingMenuOpen, setHeadingMenuOpen] = useState(false);
@@ -435,6 +447,39 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
               </div>
             )}
           </div>
+        )}
+
+        {/* Note Encryption Controls */}
+        {isEncrypted || isNoteUnlocked ? (
+          <div className="flex items-center gap-0.5 bg-accent-purple/10 border border-accent-purple/20 px-1 py-0.5 rounded">
+            <button
+              onClick={onRelockNote}
+              className="p-0.5 text-accent-purple hover:text-white rounded hover:bg-accent-purple/30 transition-colors flex items-center gap-1 text-[10px]"
+              title="Lock Note Now (Encrypts back to ciphertext)"
+            >
+              <Lock className="w-3 h-3" />
+              <span>Lock</span>
+            </button>
+            {onRemoveEncryption && (
+              <button
+                onClick={onRemoveEncryption}
+                className="p-0.5 text-text-muted hover:text-amber-400 rounded hover:bg-bg-hover transition-colors"
+                title="Remove Encryption (Save as plain text Markdown)"
+              >
+                <Unlock className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        ) : (
+          onOpenEncryptModal && (
+            <button
+              onClick={onOpenEncryptModal}
+              className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover transition-colors"
+              title="Encrypt Note with AES-256 Passphrase"
+            >
+              <Lock className="w-3.5 h-3.5" />
+            </button>
+          )
         )}
       </div>
 

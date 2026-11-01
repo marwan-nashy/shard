@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { CheckSquare, Square, CheckCircle2, Search, RefreshCw, FileText, ExternalLink } from "lucide-react";
+import { CheckSquare, Square, CheckCircle2, Search, RefreshCw, FileText, ExternalLink, Download } from "lucide-react";
 import { TaskItem } from "../types";
 import { appInvoke as invoke } from "../backend";
+import { generateTasksIcs, downloadIcsFile } from "../utils/icsExport";
 
 interface TasksPaneProps {
   allNotes: { title: string; path: string }[];
@@ -141,14 +142,26 @@ export const TasksPane: React.FC<TasksPaneProps> = ({
               {totalPending}
             </span>
           </div>
-          <button
-            onClick={scanAllTasks}
-            disabled={loading}
-            className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover transition-colors"
-            title="Rescan Vault Tasks"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-accent-purple" : ""}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                const ics = generateTasksIcs(filteredTasks.length > 0 ? filteredTasks : tasks);
+                downloadIcsFile("shard-tasks.ics", ics);
+              }}
+              className="p-1 text-text-muted hover:text-accent-purple rounded hover:bg-bg-hover transition-colors"
+              title="Export Tasks to RFC 5545 iCalendar (.ics)"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={scanAllTasks}
+              disabled={loading}
+              className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover transition-colors"
+              title="Rescan Vault Tasks"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-accent-purple" : ""}`} />
+            </button>
+          </div>
         </div>
 
         {/* Search */}

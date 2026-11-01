@@ -21,6 +21,9 @@ import { FormattingToolbar } from "./FormattingToolbar";
 import { PropertiesInspector } from "./PropertiesInspector";
 import { KanbanView } from "./KanbanView";
 import { saveAttachment, resolveAttachmentUrl } from "../utils/attachmentHandler";
+import { isNoteEncrypted, encryptNote } from "../utils/noteEncryption";
+import { LockedNoteView } from "./LockedNoteView";
+import { NoteEncryptionModal } from "./NoteEncryptionModal";
 
 export interface EditorProps {
   content: string;
@@ -648,13 +651,42 @@ export const Editor: React.FC<EditorProps> = ({
   const viewRef = useRef<EditorView | null>(null);
   const [isKanban, setIsKanban] = useState(false);
 
+  // Note Encryption (AES-256)
+  const isEncrypted = useMemo(() => isNoteEncrypted(content), [content]);
+  const [unlockedState, setUnlockedState] = useState<{
+    noteTitle?: string;
+    plainText: string;
+    passphrase: string;
+  } | null>(null);
+  const [isEncryptModalOpen, setIsEncryptModalOpen] = useState(false);
+
+  useEffect(() => {
+    setUnlockedState(null);
+  }, [activeTitle]);
+
+  const isLocked = isEncrypted && (!unlockedState || unlockedState.noteTitle !== activeTitle);
+  const effectiveContent = isEncrypted && unlockedState ? unlockedState.plainText : content;
+
+  const handleContentChange = (newDoc: string) => {
+    if (isEncrypted && unlockedState) {
+      setUnlockedState((prev) => (prev ? { ...prev, plainText: newDoc } : null));
+      encryptNote(newDoc, unlockedState.passphrase).then((cipher) => {
+        onChange(cipher);
+      });
+    } else {
+      onChange(newDoc);
+    }
+  };
+  const handleContentChangeRef = useRef(handleContentChange);
+  handleContentChangeRef.current = handleContentChange;
+
   // Live Stats
   const wordCount = useMemo(() => {
-    const trimmed = content.trim();
+    const trimmed = effectiveContent.trim();
     return trimmed ? trimmed.split(/\s+/).length : 0;
-  }, [content]);
+  }, [effectiveContent]);
 
-  const charCount = content.length;
+  const charCount = effectiveContent.length;
   const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
   // Slash commands completion (/)
@@ -906,7 +938,7 @@ export const Editor: React.FC<EditorProps> = ({
       autocompletion({ override: [wikilinkCompletion, slashCommandsCompletion] }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          onChange(update.state.doc.toString());
+          handleContentChangeRef.current(update.state.doc.toString());
         }
       }),
       EditorView.theme({
@@ -987,7 +1019,7 @@ export const Editor: React.FC<EditorProps> = ({
     }
 
     const state = EditorState.create({
-      doc: content,
+      doc: effectiveContent,
       extensions,
     });
 
@@ -1007,13 +1039,13 @@ export const Editor: React.FC<EditorProps> = ({
   useEffect(() => {
     if (viewRef.current) {
       const currentDoc = viewRef.current.state.doc.toString();
-      if (currentDoc !== content) {
+      if (currentDoc !== effectiveContent) {
         viewRef.current.dispatch({
-          changes: { from: 0, to: currentDoc.length, insert: content },
+          changes: { from: 0, to: currentDoc.length, insert: effectiveContent },
         });
       }
     }
-  }, [content]);
+  }, [effectiveContent]);
 
   // Scroll to target heading
   useEffect(() => {
@@ -1068,32 +1100,71 @@ export const Editor: React.FC<EditorProps> = ({
           onOpenAudioMemo={onOpenAudioMemo}
           onToggleKanban={() => setIsKanban((prev) => !prev)}
           isKanban={isKanban}
+          isEncrypted={isEncrypted}
+          isNoteUnlocked={!isLocked && isEncrypted}
+          onOpenEncryptModal={() => setIsEncryptModalOpen(true)}
+          onRelockNote={() => setUnlockedState(null)}
+          onRemoveEncryption={() => {
+            if (unlockedState) {
+              const plain = unlockedState.plainText;
+              setUnlockedState(null);
+              onChange(plain);
+              setTimeout(onSave, 50);
+            }
+          }}
         />
       )}
 
-      {/* Frontmatter YAML Properties Inspector */}
-      {features?.propertiesInspector !== false && !isKanban && (
-        <PropertiesInspector
-          content={content}
-          onChange={onChange}
-          features={features}
-        />
-      )}
-
-      {/* Either Kanban Board or CodeMirror Scroller Container */}
-      {isKanban && features?.kanbanView !== false ? (
-        <div className="w-full flex-1 overflow-hidden p-3 bg-bg-secondary/40">
-          <KanbanView
-            content={content}
-            onChange={onChange}
+      {/* Locked Note Screen */}
+      {isLocked ? (
+        <div className="w-full flex-1 overflow-hidden">
+          <LockedNoteView
+            encryptedContent={content}
             noteTitle={activeTitle}
-            textDirection={textDirection}
-            features={features}
+            onUnlocked={(plain, pass) => {
+              setUnlockedState({ noteTitle: activeTitle, plainText: plain, passphrase: pass });
+            }}
           />
         </div>
       ) : (
-        <div ref={containerRef} className="w-full h-full flex-1 overflow-hidden" />
+        <>
+          {/* Frontmatter YAML Properties Inspector */}
+          {features?.propertiesInspector !== false && !isKanban && (
+            <PropertiesInspector
+              content={effectiveContent}
+              onChange={handleContentChange}
+              features={features}
+            />
+          )}
+
+          {/* Either Kanban Board or CodeMirror Scroller Container */}
+          {isKanban && features?.kanbanView !== false ? (
+            <div className="w-full flex-1 overflow-hidden p-3 bg-bg-secondary/40">
+              <KanbanView
+                content={effectiveContent}
+                onChange={handleContentChange}
+                noteTitle={activeTitle}
+                textDirection={textDirection}
+                features={features}
+              />
+            </div>
+          ) : (
+            <div ref={containerRef} className="w-full h-full flex-1 overflow-hidden" />
+          )}
+        </>
       )}
+
+      {/* Note Encryption Passphrase Modal */}
+      <NoteEncryptionModal
+        isOpen={isEncryptModalOpen}
+        onClose={() => setIsEncryptModalOpen(false)}
+        currentContent={effectiveContent}
+        onEncrypted={(cipher) => {
+          onChange(cipher);
+          setUnlockedState(null);
+          setTimeout(onSave, 50);
+        }}
+      />
     </div>
   );
 };

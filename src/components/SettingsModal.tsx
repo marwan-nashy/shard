@@ -21,7 +21,12 @@ import {
   Type as TypeIcon,
   Code as CodeIcon,
   RotateCcw,
+  Bot,
+  Copy,
+  Terminal,
+  Cpu,
 } from "lucide-react";
+import { appInvoke } from "../backend";
 import { SyncConfig } from "../types";
 import { loadSyncConfig, saveSyncConfig, testWebDavConnection, performWebDavSync } from "../utils/syncManager";
 import {
@@ -55,7 +60,7 @@ interface SettingsModalProps {
   onThemeChange?: (theme: ThemePreset) => void;
   vaultPath?: string | null;
   t?: Translations["settings"];
-  initialTab?: "general" | "language" | "appearance" | "features" | "hotkeys" | "sync" | "about";
+  initialTab?: "general" | "language" | "appearance" | "features" | "hotkeys" | "sync" | "mcp" | "about";
   features?: FeatureFlags;
   onToggleFeature?: (key: keyof FeatureFlags) => void;
   onResetFeatures?: () => void;
@@ -90,8 +95,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   vaultNotes = [],
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "general" | "language" | "appearance" | "features" | "hotkeys" | "sync" | "about"
+    "general" | "language" | "appearance" | "features" | "hotkeys" | "sync" | "mcp" | "about"
   >(initialTab);
+  const [mcpInfo, setMcpInfo] = useState<{
+    executable_path: string;
+    vault_path: string | null;
+    claude_config_snippet: string;
+    cursor_config_snippet: string;
+  } | null>(null);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab === "mcp") {
+      appInvoke<{
+        executable_path: string;
+        vault_path: string | null;
+        claude_config_snippet: string;
+        cursor_config_snippet: string;
+      }>("get_mcp_config")
+        .then((res) => {
+          if (res) setMcpInfo(res);
+        })
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedType(type);
+    setTimeout(() => setCopiedType(null), 2000);
+  };
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [featureCategory, setFeatureCategory] = useState<"all" | "views" | "sidebar" | "editor" | "tools">("all");
@@ -335,6 +368,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Keyboard className="w-4 h-4 text-text-faint" /> {t?.hotkeys || "Hotkeys"}
+            </button>
+            <button
+              onClick={() => setActiveTab("mcp")}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-colors ${
+                activeTab === "mcp"
+                  ? "bg-bg-card text-white font-medium border-l-2 border-accent-purple"
+                  : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+              }`}
+            >
+              <Bot className="w-4 h-4 text-accent-purple" /> <span>AI & MCP Server</span>
             </button>
             <button
               onClick={() => setActiveTab("about")}
@@ -945,6 +988,127 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* AI & MCP Server Tab */}
+            {activeTab === "mcp" && (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-accent-purple" />
+                      <span>Model Context Protocol (MCP) Server</span>
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium flex items-center gap-1">
+                      <Cpu className="w-3 h-3" />
+                      <span>Stdio Engine Active</span>
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-1 leading-relaxed">
+                    Connect external AI agents (such as <strong>Claude Desktop</strong>, <strong>Cursor IDE</strong>, or local LLMs) directly to your Shard notes using the standard Model Context Protocol. External tools can safely search, read, and write notes in your vault.
+                  </p>
+                </div>
+
+                {/* Vault Info */}
+                <div className="p-3 bg-bg-secondary/40 border border-border-subtle rounded-lg space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-text-muted">Target Vault Directory:</span>
+                    <span className="font-mono text-text-primary text-[11px] bg-bg-primary px-2 py-0.5 rounded border border-border-subtle">
+                      {vaultPath || mcpInfo?.vault_path || "Active Vault"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-text-muted">CLI Launch Flag:</span>
+                    <span className="font-mono text-accent-purple text-[11px]">
+                      shard.exe --mcp --vault &quot;{vaultPath || mcpInfo?.vault_path || "."}&quot;
+                    </span>
+                  </div>
+                </div>
+
+                {/* Exposing Tools */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-text-secondary uppercase">
+                    Available MCP Tools:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded bg-bg-secondary/30 border border-border-subtle/50">
+                      <div className="font-mono font-bold text-accent-purple">list_notes</div>
+                      <div className="text-text-faint text-[10px]">Lists all Markdown files in vault</div>
+                    </div>
+                    <div className="p-2 rounded bg-bg-secondary/30 border border-border-subtle/50">
+                      <div className="font-mono font-bold text-accent-purple">read_note</div>
+                      <div className="text-text-faint text-[10px]">Reads full note content by title or path</div>
+                    </div>
+                    <div className="p-2 rounded bg-bg-secondary/30 border border-border-subtle/50">
+                      <div className="font-mono font-bold text-accent-purple">search_notes</div>
+                      <div className="text-text-faint text-[10px]">Okapi BM25 probabilistic search ranking</div>
+                    </div>
+                    <div className="p-2 rounded bg-bg-secondary/30 border border-border-subtle/50">
+                      <div className="font-mono font-bold text-accent-purple">write_note</div>
+                      <div className="text-text-faint text-[10px]">Creates or updates markdown notes</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* One-Click Config for Claude Desktop */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-text-primary flex items-center gap-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-accent-blue" />
+                      <span>Claude Desktop Config (claude_desktop_config.json)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyToClipboard(
+                          mcpInfo?.claude_config_snippet ||
+                            JSON.stringify(
+                              {
+                                mcpServers: {
+                                  shard: {
+                                    command: "shard.exe",
+                                    args: ["--mcp", "--vault", vaultPath || "."],
+                                  },
+                                },
+                              },
+                              null,
+                              2
+                            ),
+                          "claude"
+                        )
+                      }
+                      className="px-2 py-0.5 rounded bg-bg-secondary hover:bg-bg-hover border border-border-subtle text-[11px] text-text-primary flex items-center gap-1 transition-colors"
+                    >
+                      {copiedType === "claude" ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 text-text-muted" />
+                          <span>Copy Config</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded bg-bg-primary border border-border-subtle text-[10px] text-text-muted font-mono overflow-x-auto leading-relaxed max-h-36">
+                    {mcpInfo?.claude_config_snippet ||
+                      JSON.stringify(
+                        {
+                          mcpServers: {
+                            shard: {
+                              command: "shard.exe",
+                              args: ["--mcp", "--vault", vaultPath || "."],
+                            },
+                          },
+                        },
+                        null,
+                        2
+                      )}
+                  </pre>
+                </div>
               </div>
             )}
 

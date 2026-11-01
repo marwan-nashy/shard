@@ -357,6 +357,37 @@ async function webMockInvoke<T>(cmd: string, args: Record<string, any> = {}): Pr
       return { linked_mentions: linked, unlinked_mentions: unlinked } as unknown as T;
     }
 
+    case "get_mcp_config": {
+      return {
+        executable_path: "shard",
+        vault_path: "Web Demo Vault",
+        claude_config_snippet: JSON.stringify(
+          {
+            mcpServers: {
+              shard: {
+                command: "shard",
+                args: ["--mcp", "--vault", "/path/to/vault"],
+              },
+            },
+          },
+          null,
+          2
+        ),
+        cursor_config_snippet: JSON.stringify(
+          {
+            mcpServers: {
+              shard: {
+                command: "shard",
+                args: ["--mcp", "--vault", "/path/to/vault"],
+              },
+            },
+          },
+          null,
+          2
+        ),
+      } as unknown as T;
+    }
+
     default:
       console.warn("Unhandled mock invoke command:", cmd, args);
       return undefined as unknown as T;

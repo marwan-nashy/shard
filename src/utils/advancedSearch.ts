@@ -1,4 +1,5 @@
 import { SearchResult } from "../types";
+import { Bm25Index } from "./bm25";
 
 export interface SearchFilterTokens {
   tags: string[];
@@ -20,7 +21,7 @@ export function parseSearchQuery(query: string): SearchFilterTokens {
   };
 
   // 1. Extract exact phrases in quotes "..."
-  let remaining = query.replace(/"([^"]+)"/g, (_, phrase) => {
+  const remaining = query.replace(/"([^"]+)"/g, (_, phrase) => {
     tokens.exactPhrases.push(phrase.toLowerCase().trim());
     return "";
   });
@@ -67,12 +68,20 @@ export function executeAdvancedSearch(
   const tokens = parseSearchQuery(query);
   const results: { item: NoteSearchIndexItem; score: number; snippet: string }[] = [];
 
+  // Initialize BM25 Index over note collection
+  const bm25Docs = notes.map((n) => ({
+    id: n.path,
+    title: n.title,
+    content: n.content || "",
+  }));
+  const bm25 = new Bm25Index(bm25Docs);
+
   for (const note of notes) {
     const titleLower = note.title.toLowerCase();
     const pathLower = note.path.toLowerCase();
     const content = note.content || "";
     const contentLower = content.toLowerCase();
-    let score = 0;
+    let bonusScore = 0;
 
     // Filter by path
     if (tokens.pathPrefix && !pathLower.includes(tokens.pathPrefix)) {
@@ -91,7 +100,7 @@ export function executeAdvancedSearch(
         (t) => noteTags.includes(t) || contentLower.includes(`#${t}`)
       );
       if (!hasAllTags) continue;
-      score += tokens.tags.length * 10;
+      bonusScore += tokens.tags.length * 15;
     }
 
     // Filter by tasks
@@ -101,7 +110,7 @@ export function executeAdvancedSearch(
       if (tokens.taskFilter === "todo" && !hasTodo) continue;
       if (tokens.taskFilter === "done" && !hasDone) continue;
       if (tokens.taskFilter === "any" && !hasTodo && !hasDone) continue;
-      score += 5;
+      bonusScore += 5;
     }
 
     // Filter by exact phrases
@@ -111,11 +120,11 @@ export function executeAdvancedSearch(
         passedExact = false;
         break;
       }
-      score += 15;
+      bonusScore += 25;
     }
     if (!passedExact) continue;
 
-    // Filter by terms
+    // Filter by query terms
     let passedTerms = true;
     for (const term of tokens.terms) {
       const inTitle = titleLower.includes(term);
@@ -124,14 +133,12 @@ export function executeAdvancedSearch(
         passedTerms = false;
         break;
       }
-      if (inTitle) score += 20;
-      if (inContent) {
-        // Count occurrences
-        const matches = contentLower.split(term).length - 1;
-        score += Math.min(matches * 2, 20);
-      }
     }
     if (!passedTerms) continue;
+
+    // Compute Okapi BM25 score
+    const bm25Score = tokens.terms.length > 0 ? bm25.scoreDocument(note.path, tokens.terms) : 1;
+    const finalScore = bm25Score * 10 + bonusScore;
 
     // Extract best snippet
     let snippet = "Note in vault";
@@ -147,7 +154,7 @@ export function executeAdvancedSearch(
       snippet = content.slice(0, 100).replace(/\n+/g, " ") + "...";
     }
 
-    results.push({ item: note, score, snippet });
+    results.push({ item: note, score: finalScore, snippet });
   }
 
   // Sort results
