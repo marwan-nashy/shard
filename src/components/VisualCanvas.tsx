@@ -787,6 +787,7 @@ export const VisualCanvas: React.FC<VisualCanvasProps> = ({
                       prev.map((n) => (n.id === node.id ? { ...n, text: val } : n))
                     );
                   }}
+                  dir="auto"
                   placeholder="Write note or ideas..."
                   className="flex-1 w-full bg-transparent text-xs text-text-primary outline-none resize-none leading-relaxed placeholder:text-text-faint/60"
                   onMouseDown={(e) => e.stopPropagation()}

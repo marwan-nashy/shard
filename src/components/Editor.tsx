@@ -24,6 +24,8 @@ export interface EditorProps {
   allNoteTitles: string[];
   onNavigateToNote: (title: string, heading?: string) => void;
   targetHeading?: string | null;
+  textDirection?: "auto" | "rtl" | "ltr";
+  onToggleTextDirection?: () => void;
 }
 
 // Widget for interactive checkbox toggling
@@ -34,7 +36,7 @@ class CheckboxWidget extends WidgetType {
 
   toDOM(view: EditorView): HTMLElement {
     const wrap = document.createElement("span");
-    wrap.className = "inline-flex items-center align-middle mr-1.5 cursor-pointer";
+    wrap.className = "inline-flex items-center align-middle mx-1.5 cursor-pointer";
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = this.checked;
@@ -60,6 +62,7 @@ class CodeBlockHeaderWidget extends WidgetType {
 
   toDOM(): HTMLElement {
     const bar = document.createElement("div");
+    bar.dir = "ltr";
     bar.className =
       "flex items-center justify-between px-3 py-1 bg-[#141414] border border-[#2e2e2e] rounded-t text-[11px] text-[#888] font-mono select-none -mb-[1px]";
 
@@ -370,6 +373,8 @@ export const Editor: React.FC<EditorProps> = ({
   allNoteTitles,
   onNavigateToNote,
   targetHeading,
+  textDirection = "auto",
+  onToggleTextDirection,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -424,9 +429,20 @@ export const Editor: React.FC<EditorProps> = ({
           key: "Mod-k",
           run: (v) => wrapSelection(v, "[[", "]]"),
         },
+        {
+          key: "Mod-Shift-x",
+          run: () => {
+            if (onToggleTextDirection) {
+              onToggleTextDirection();
+              return true;
+            }
+            return false;
+          },
+        },
       ]),
       markdown(),
       highlightActiveLine(),
+      EditorView.perLineTextDirection.of(true),
       autocompletion({ override: [wikilinkCompletion] }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
@@ -513,8 +529,15 @@ export const Editor: React.FC<EditorProps> = ({
     }
   }, [targetHeading, content]);
 
+  const dirClass =
+    textDirection === "rtl"
+      ? "editor-dir-rtl"
+      : textDirection === "ltr"
+      ? "editor-dir-ltr"
+      : "editor-dir-auto";
+
   return (
-    <div className="w-full h-full overflow-hidden bg-bg-primary flex flex-col">
+    <div className={`w-full h-full overflow-hidden bg-bg-primary flex flex-col ${dirClass}`}>
       <div ref={containerRef} className="w-full h-full flex-1" />
     </div>
   );

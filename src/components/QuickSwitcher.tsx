@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { SearchResult, CommandItem } from "../types";
+import { Translations } from "../i18n";
 import {
   Search,
   FileText,
@@ -16,6 +17,8 @@ import {
   Columns,
   Save,
   Sliders,
+  AlignRight,
+  Globe,
 } from "lucide-react";
 
 interface QuickSwitcherProps {
@@ -27,6 +30,7 @@ interface QuickSwitcherProps {
   allNotes: { title: string; path: string }[];
   // Commands execution actions
   onExecuteCommand?: (commandId: string) => void;
+  t?: Translations;
 }
 
 export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
@@ -37,6 +41,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   onSearch,
   allNotes,
   onExecuteCommand,
+  t,
 }) => {
   const [mode, setMode] = useState<"notes" | "commands">(initialMode);
   const [query, setQuery] = useState("");
@@ -151,6 +156,35 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
       shortcut: "Ctrl + S",
       category: "File",
       action: () => onExecuteCommand?.("save-note"),
+    },
+    {
+      id: "cycle-direction",
+      title: t?.commands.setDirAuto || "Toggle Text Direction (Auto / RTL / LTR)",
+      description: "Cycle editor text direction",
+      shortcut: "Ctrl + Shift + X",
+      category: "Editor",
+      action: () => onExecuteCommand?.("cycle-direction"),
+    },
+    {
+      id: "set-dir-rtl",
+      title: t?.commands.setDirRTL || "Text Direction: Right to Left (RTL)",
+      description: "Set editor direction to RTL for Arabic writing",
+      category: "Editor",
+      action: () => onExecuteCommand?.("set-dir-rtl"),
+    },
+    {
+      id: "set-dir-ltr",
+      title: t?.commands.setDirLTR || "Text Direction: Left to Right (LTR)",
+      description: "Set editor direction to LTR for English writing",
+      category: "Editor",
+      action: () => onExecuteCommand?.("set-dir-ltr"),
+    },
+    {
+      id: "switch-language",
+      title: t?.commands.switchLanguage || "Switch Language (English / العربية)",
+      description: "Toggle app UI language between English and Arabic",
+      category: "App",
+      action: () => onExecuteCommand?.("switch-language"),
     },
   ];
 
@@ -293,6 +327,12 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
         return <Settings className="w-4 h-4 text-accent-purple" />;
       case "save-note":
         return <Save className="w-4 h-4 text-accent-purple" />;
+      case "cycle-direction":
+      case "set-dir-rtl":
+      case "set-dir-ltr":
+        return <AlignRight className="w-4 h-4 text-accent-purple" />;
+      case "switch-language":
+        return <Globe className="w-4 h-4 text-accent-purple" />;
       default:
         return <Sliders className="w-4 h-4 text-accent-purple" />;
     }
@@ -352,10 +392,11 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
           <input
             ref={inputRef}
             type="text"
+            dir="auto"
             placeholder={
               mode === "notes"
-                ? "Type note name or full-text query (type '>' for commands)..."
-                : "Type command name..."
+                ? (t?.quickSwitcher.notesPlaceholder || "Type note name or full-text query (type '>' for commands)...")
+                : (t?.quickSwitcher.commandsPlaceholder || "Type command name...")
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -371,7 +412,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
           {mode === "notes" ? (
             results.length === 0 ? (
               <div className="p-6 text-center text-xs text-text-faint">
-                No matching notes found.
+                {t?.quickSwitcher.noNotesFound || "No matching notes found."}
               </div>
             ) : (
               results.map((res, idx) => (
@@ -389,19 +430,21 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
                 >
                   <FileText className="w-4 h-4 text-accent-purple mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-text-primary truncate">
+                    <div className="text-xs font-medium text-text-primary truncate" dir="auto">
                       {res.title}
                     </div>
-                    <div className="text-[11px] text-text-faint truncate mt-0.5">
-                      {res.snippet}
-                    </div>
+                    {res.snippet && (
+                      <div className="text-[11px] text-text-faint truncate mt-0.5" dir="auto">
+                        {res.snippet}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
             )
           ) : filteredCommands.length === 0 ? (
             <div className="p-6 text-center text-xs text-text-faint">
-              No matching commands found.
+              {t?.quickSwitcher.noCommandsFound || "No matching commands found."}
             </div>
           ) : (
             filteredCommands.map((cmd, idx) => (

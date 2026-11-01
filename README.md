@@ -80,12 +80,22 @@ Shard is a high-performance, open-source personal knowledge base designed to run
 
 ---
 
+### 7. Full Arabic & Bidirectional (BiDi / RTL) Support
+- **Automatic Per-Line Direction (`dir="auto"`)**: CodeMirror 6 and live preview evaluate each line dynamically. Arabic paragraphs flow right-to-left while English text and code blocks flow left-to-right.
+- **Direction Toggle (`Ctrl + Shift + X`)**: Instantly cycle text direction between `Auto`, `RTL` (Right-to-Left), and `LTR` (Left-to-Right) via shortcut, ribbon button, or status bar pill.
+- **Multilingual UI (English & العربية)**: Switch the entire application interface into Arabic from **Settings > Language & Direction** or via Command Palette.
+- **Arabic Typography**: Optimized typography fallbacks including Cairo, Segoe UI, and Tahoma.
+- **Unicode-Safe Rust Backend**: Safe multi-byte UTF-8 string slicing across vault search, tag extraction, and link refactoring.
+
+---
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 | :--- | :--- |
 | `Ctrl + O` | Open Quick Switcher (Find Note) |
 | `Ctrl + P` | Open Command Palette |
+| `Ctrl + Shift + X` | Toggle Text Direction (Auto / RTL / LTR) |
 | `Ctrl + N` | Create New Note |
 | `Ctrl + Shift + N` | Create New Folder |
 | `Ctrl + S` | Save Current Note |

@@ -32,7 +32,7 @@ body {
   padding: 0;
   background-color: #1e1e1e;
   color: #dcddde;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
   user-select: none;
   overflow: hidden;
   height: 100vh;
@@ -67,7 +67,7 @@ body {
 }
 
 .cm-scroller {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
   line-height: 1.6;
 }
 
@@ -80,6 +80,7 @@ body {
 
 .cm-line {
   padding: 0 !important;
+  unicode-bidi: plaintext;
 }
 
 .cm-activeLine {
@@ -149,20 +150,20 @@ body {
 }
 
 .cm-callout {
-  border-left: 4px solid #7b6cd9;
+  border-inline-start: 4px solid #7b6cd9;
   background-color: rgba(123, 108, 217, 0.08);
   padding: 8px 14px;
   margin: 6px 0;
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
 }
 
 .cm-callout-warning {
-  border-left-color: #e6963c;
+  border-inline-start-color: #e6963c;
   background-color: rgba(230, 150, 60, 0.08);
 }
 
 .cm-callout-tip {
-  border-left-color: #56b075;
+  border-inline-start-color: #56b075;
   background-color: rgba(86, 176, 117, 0.08);
 }
 
@@ -264,5 +265,35 @@ body {
   font-size: 0.9em !important;
   padding-left: 12px !important;
   border-left: 2px solid #383838 !important;
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
 }
+
+/* BiDi direction classes for CodeMirror */
+.editor-dir-rtl .cm-line {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.editor-dir-ltr .cm-line {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
+.editor-dir-auto .cm-line {
+  unicode-bidi: plaintext !important;
+}
+
+/* Force math & code marks to stay LTR */
+.cm-inline-code, .cm-math-inline {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+
+/* RTL layout adjustments */
+[dir="rtl"] {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Cairo", Tahoma, "Noto Sans Arabic", sans-serif;
+}
+
 

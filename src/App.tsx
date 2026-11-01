@@ -23,8 +23,41 @@ import { BacklinksPane } from "./components/BacklinksPane";
 import { SettingsModal } from "./components/SettingsModal";
 import { VaultSelectorModal } from "./components/VaultSelectorModal";
 import { Link2, ListTree } from "lucide-react";
+import { Language, TextDirection, translations } from "./i18n";
 
 export default function App() {
+  // Language & Direction state
+  const [language, setLanguage] = useState<Language>(() => {
+    return (localStorage.getItem("shard_language") as Language) || "en";
+  });
+  const [textDirection, setTextDirection] = useState<TextDirection>(() => {
+    return (localStorage.getItem("shard_text_direction") as TextDirection) || "auto";
+  });
+
+  const t = translations[language];
+
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+    localStorage.setItem("shard_language", lang);
+    document.documentElement.lang = lang;
+  };
+
+  const handleTextDirectionChange = (dir: TextDirection) => {
+    setTextDirection(dir);
+    localStorage.setItem("shard_text_direction", dir);
+    setStatusMessage(
+      language === "ar"
+        ? `اتجاه النص: ${dir === "auto" ? "تلقائي" : dir === "rtl" ? "من اليمين لليسار" : "من اليسار لليمين"}`
+        : `Text Direction: ${dir.toUpperCase()}`
+    );
+  };
+
+  const cycleTextDirection = () => {
+    const nextDir: TextDirection =
+      textDirection === "auto" ? "rtl" : textDirection === "rtl" ? "ltr" : "auto";
+    handleTextDirectionChange(nextDir);
+  };
+
   // Vault state
   const [vaultPath, setVaultPath] = useState<string | null>(null);
   const [fileNodes, setFileNodes] = useState<FileNode[]>([]);
@@ -619,6 +652,21 @@ export default function App() {
       case "save-note":
         saveActiveNote();
         break;
+      case "cycle-direction":
+        cycleTextDirection();
+        break;
+      case "set-dir-auto":
+        handleTextDirectionChange("auto");
+        break;
+      case "set-dir-rtl":
+        handleTextDirectionChange("rtl");
+        break;
+      case "set-dir-ltr":
+        handleTextDirectionChange("ltr");
+        break;
+      case "switch-language":
+        handleLanguageChange(language === "en" ? "ar" : "en");
+        break;
       default:
         break;
     }
@@ -635,6 +683,9 @@ export default function App() {
         e.preventDefault();
         setQuickSwitcherMode("commands");
         setQuickSwitcherOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "X" || e.key === "x")) {
+        e.preventDefault();
+        cycleTextDirection();
       } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         saveActiveNote();
@@ -694,7 +745,10 @@ export default function App() {
   }, [loadVault]);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-bg-primary text-text-primary overflow-hidden font-sans select-none">
+    <div
+      dir={language === "ar" ? "rtl" : "ltr"}
+      className="flex flex-col h-screen w-screen bg-bg-primary text-text-primary overflow-hidden font-sans select-none"
+    >
       {/* Main Workspace Row */}
       <div className="flex flex-1 overflow-hidden">
         {/* 1. Left Activity Ribbon (42px) */}
@@ -710,6 +764,9 @@ export default function App() {
           onOpenCanvas={handleOpenCanvasView}
           onOpenVaultDialog={() => setVaultSelectorOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
+          t={t.ribbon}
+          textDirection={textDirection}
+          onToggleTextDirection={cycleTextDirection}
         />
 
         {/* 2. Left Multi-Tab Sidebar (Files, Search, Tags, Outline) */}
@@ -739,6 +796,7 @@ export default function App() {
               onNavigateToNote={openNote}
               activeContent={activeContent}
               onJumpToHeading={(heading) => setTargetHeading(heading)}
+              t={t.sidebar}
             />
           </div>
         )}
@@ -799,6 +857,8 @@ export default function App() {
                         if (target) openNote(target.path, heading);
                       }}
                       targetHeading={targetHeading}
+                      textDirection={textDirection}
+                      onToggleTextDirection={cycleTextDirection}
                     />
                   </div>
 
@@ -935,6 +995,9 @@ export default function App() {
         status={statusMessage}
         activePath={activePath}
         content={activeContent}
+        t={t.statusBar}
+        textDirection={textDirection}
+        onToggleTextDirection={cycleTextDirection}
       />
 
       {/* Quick Switcher & Command Palette Modal (Ctrl+O / Ctrl+P) */}
@@ -946,12 +1009,18 @@ export default function App() {
         onSearch={handleSearchVault}
         allNotes={allNotes}
         onExecuteCommand={handleExecuteCommand}
+        t={t}
       />
 
       {/* Settings Modal (Ctrl+,) */}
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        language={language}
+        onLanguageChange={handleLanguageChange}
+        textDirection={textDirection}
+        onTextDirectionChange={handleTextDirectionChange}
+        t={t.settings}
       />
 
       {/* Vault Selector / Welcome Modal */}
@@ -971,17 +1040,17 @@ export default function App() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-bg-card border border-border-subtle rounded-xl p-5 shadow-2xl space-y-4">
             <h3 className="text-sm font-semibold text-text-primary">
-              Rename Note & Refactor Links
+              {t.dialogs.renameTitle}
             </h3>
             <p className="text-xs text-text-muted">
-              All references to{" "}
-              <span className="text-accent-purple font-mono">
+              {t.dialogs.renamePrompt}{" "}
+              <span className="text-accent-purple font-mono" dir="auto">
                 [[{renameDialog.oldName.replace(/\.(md|canvas)$/, "")}]]
-              </span>{" "}
-              across the vault will be automatically and safely updated.
+              </span>
             </p>
             <input
               type="text"
+              dir="auto"
               value={renameDialog.newName}
               onChange={(e) =>
                 setRenameDialog((prev) => ({ ...prev, newName: e.target.value }))
@@ -1011,13 +1080,13 @@ export default function App() {
                 }
                 className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary rounded"
               >
-                Cancel
+                {t.dialogs.cancel}
               </button>
               <button
                 onClick={handleRenameConfirm}
                 className="px-4 py-1.5 text-xs text-white bg-accent-purple hover:bg-accent-purpleHover rounded font-medium transition-colors"
               >
-                Rename & Refactor
+                {t.dialogs.confirm}
               </button>
             </div>
           </div>

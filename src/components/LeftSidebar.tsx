@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { FileNode, SearchResult, SidebarTab, OutlineItem } from "../types";
+import { Translations } from "../i18n";
 import { FileTree } from "./FileTree";
 import {
   Folder,
@@ -33,6 +34,7 @@ interface LeftSidebarProps {
   // Outline props
   activeContent: string;
   onJumpToHeading: (headingTitle: string) => void;
+  t?: Translations["sidebar"];
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -52,6 +54,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onNavigateToNote,
   activeContent,
   onJumpToHeading,
+  t,
 }) => {
   // Search View State
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,7 +124,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               ? "bg-bg-card text-accent-purple font-medium"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Files"
+          title={t?.files || "Files"}
         >
           <Folder className="w-3.5 h-3.5" />
         </button>
@@ -133,7 +136,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               ? "bg-bg-card text-accent-purple font-medium"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Search in vault"
+          title={t?.search || "Search"}
         >
           <Search className="w-3.5 h-3.5" />
         </button>
@@ -145,7 +148,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               ? "bg-bg-card text-accent-purple font-medium"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Tags"
+          title={t?.tags || "Tags"}
         >
           <Tag className="w-3.5 h-3.5" />
         </button>
@@ -157,7 +160,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               ? "bg-bg-card text-accent-purple font-medium"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Document Outline"
+          title={t?.outline || "Outline"}
         >
           <ListTree className="w-3.5 h-3.5" />
         </button>
@@ -176,6 +179,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             onCreateCanvas={onCreateCanvas}
             onRenameItem={onRenameItem}
             onDeleteItem={onDeleteItem}
+            t={t}
           />
         )}
 
@@ -189,7 +193,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  placeholder="Search vault..."
+                  placeholder={t?.searchPlaceholder || "Search notes..."}
+                  dir="auto"
                   className="w-full bg-transparent border-none outline-none text-xs text-text-primary placeholder:text-text-faint"
                   autoFocus
                 />
@@ -218,11 +223,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {!searchQuery ? (
                 <div className="text-center text-text-faint text-[11px] py-8">
-                  Type to search note contents and titles across the vault.
+                  {t?.searchPlaceholder || "Search notes..."}
                 </div>
               ) : searchResults.length === 0 && !isSearching ? (
                 <div className="text-center text-text-faint text-[11px] py-8">
-                  No matching notes found.
+                  {t?.noResults || "No matching notes found."}
                 </div>
               ) : (
                 searchResults.map((res) => (
@@ -233,10 +238,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   >
                     <div className="flex items-center gap-1.5 font-medium text-text-primary">
                       <FileText className="w-3.5 h-3.5 text-accent-purple shrink-0" />
-                      <span className="truncate">{res.title}</span>
+                      <span className="truncate" dir="auto">{res.title}</span>
                     </div>
                     {res.snippet && (
-                      <div className="text-[11px] text-text-muted mt-1 line-clamp-2 italic">
+                      <div className="text-[11px] text-text-muted mt-1 line-clamp-2 italic" dir="auto">
                         {res.snippet}
                       </div>
                     )}
@@ -257,7 +262,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   type="text"
                   value={tagQuery}
                   onChange={(e) => setTagQuery(e.target.value)}
-                  placeholder="Filter tags..."
+                  placeholder={t?.filterTagsPlaceholder || "Filter tags..."}
+                  dir="auto"
                   className="w-full bg-transparent border-none outline-none text-xs text-text-primary placeholder:text-text-faint"
                 />
               </div>
@@ -266,7 +272,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {filteredTags.length === 0 ? (
                 <div className="text-center text-text-faint text-[11px] py-8">
-                  No tags found in this vault. Add `#tag` to any note!
+                  {t?.noTags || "No tags found in this vault. Add #tag to any note!"}
                 </div>
               ) : (
                 filteredTags.map((item) => {
@@ -284,7 +290,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         ) : (
                           <ChevronRight className="w-3 h-3 text-text-faint" />
                         )}
-                        <span className="text-accent-purple font-mono">
+                        <span className="text-accent-purple font-mono" dir="auto">
                           #{item.tag}
                         </span>
                         <span className="ml-auto text-[10px] px-1.5 py-0.2 rounded-full bg-bg-card text-text-faint font-mono">
@@ -306,7 +312,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                                 className="flex items-center gap-1.5 py-1 px-2 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary cursor-pointer text-[11px]"
                               >
                                 <FileText className="w-3 h-3 text-text-faint" />
-                                <span className="truncate">{title}</span>
+                                <span className="truncate" dir="auto">{title}</span>
                               </div>
                             );
                           })}
@@ -325,17 +331,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <div className="flex flex-col h-full">
             <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between">
               <span className="text-[11px] font-semibold tracking-wider text-text-faint uppercase">
-                Outline
+                {t?.outline || "Outline"}
               </span>
               <span className="text-[10px] text-text-faint font-mono">
-                {outlineItems.length} headings
+                {outlineItems.length}
               </span>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
               {outlineItems.length === 0 ? (
                 <div className="text-center text-text-faint text-[11px] py-8">
-                  No headings found in active note. Use `# Heading` to structure your note.
+                  {t?.noHeadings || "No headings found in active note."}
                 </div>
               ) : (
                 outlineItems.map((item, idx) => (
@@ -349,7 +355,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                     <span className="text-[10px] font-mono text-accent-purple font-semibold">
                       H{item.level}
                     </span>
-                    <span className="truncate flex-1">{item.title}</span>
+                    <span className="truncate flex-1" dir="auto">{item.title}</span>
                   </div>
                 ))
               )}

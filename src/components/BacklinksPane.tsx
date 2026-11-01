@@ -58,12 +58,12 @@ export const BacklinksPane: React.FC<BacklinksPaneProps> = ({
                   >
                     <div className="flex items-center gap-1.5 text-text-primary font-medium">
                       <FileText className="w-3 h-3 text-accent-purple" />
-                      <span>{item.source_title}</span>
+                      <span dir="auto">{item.source_title}</span>
                       <span className="ml-auto text-[10px] text-text-faint">
                         line {item.line_number}
                       </span>
                     </div>
-                    <div className="text-[11px] text-text-muted mt-1 italic truncate">
+                    <div className="text-[11px] text-text-muted mt-1 italic truncate" dir="auto">
                       "{item.snippet}"
                     </div>
                   </div>
@@ -105,9 +105,9 @@ export const BacklinksPane: React.FC<BacklinksPaneProps> = ({
                   >
                     <div className="flex items-center gap-1.5 text-text-primary font-medium">
                       <FileText className="w-3 h-3 text-text-muted" />
-                      <span>{item.source_title}</span>
+                      <span dir="auto">{item.source_title}</span>
                     </div>
-                    <div className="text-[11px] text-text-muted mt-1 italic truncate">
+                    <div className="text-[11px] text-text-muted mt-1 italic truncate" dir="auto">
                       "{item.snippet}"
                     </div>
                   </div>

@@ -8,7 +8,9 @@ import {
   Settings,
   LayoutGrid,
   FileText,
+  AlignRight,
 } from "lucide-react";
+import { Translations, TextDirection } from "../i18n";
 
 interface RibbonProps {
   activeView: "editor" | "graph" | "canvas";
@@ -19,6 +21,9 @@ interface RibbonProps {
   onOpenCanvas?: () => void;
   onOpenVaultDialog: () => void;
   onOpenSettings: () => void;
+  t?: Translations["ribbon"];
+  textDirection?: TextDirection;
+  onToggleTextDirection?: () => void;
 }
 
 export const Ribbon: React.FC<RibbonProps> = ({
@@ -30,6 +35,9 @@ export const Ribbon: React.FC<RibbonProps> = ({
   onOpenCanvas,
   onOpenVaultDialog,
   onOpenSettings,
+  t,
+  textDirection = "auto",
+  onToggleTextDirection,
 }) => {
   return (
     <div className="w-[42px] bg-bg-secondary border-r border-border-subtle flex flex-col justify-between py-2 select-none z-20">
@@ -57,7 +65,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
               ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Document Editor"
+          title={t?.editor || "Document Editor"}
         >
           <FileText className="w-4 h-4" />
         </button>
@@ -65,7 +73,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
         <button
           onClick={onOpenQuickSwitcher}
           className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
-          title="Quick Switcher (Ctrl+O / Ctrl+P)"
+          title={t?.quickSwitcher || "Quick Switcher (Ctrl+O / Ctrl+P)"}
         >
           <Search className="w-4 h-4" />
         </button>
@@ -77,7 +85,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
               ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Graph View (Ctrl+G)"
+          title={t?.graph || "Graph View (Ctrl+G)"}
         >
           <Share2 className="w-4 h-4" />
         </button>
@@ -92,7 +100,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
               ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
               : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
           }`}
-          title="Visual Canvas"
+          title={t?.canvas || "Visual Canvas"}
         >
           <LayoutGrid className="w-4 h-4" />
         </button>
@@ -100,7 +108,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
         <button
           onClick={onOpenDailyNote}
           className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
-          title="Open today's daily note"
+          title={t?.dailyNote || "Today's Daily Note"}
         >
           <Calendar className="w-4 h-4" />
         </button>
@@ -116,10 +124,24 @@ export const Ribbon: React.FC<RibbonProps> = ({
 
       {/* Bottom Pinned Icons */}
       <div className="flex flex-col items-center gap-1.5">
+        {onToggleTextDirection && (
+          <button
+            onClick={onToggleTextDirection}
+            className={`p-2 rounded-md transition-colors ${
+              textDirection === "rtl"
+                ? "bg-bg-card text-accent-purple"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title={`${t?.directionToggle || "Text Direction"}: ${textDirection.toUpperCase()}`}
+          >
+            <AlignRight className="w-4 h-4" />
+          </button>
+        )}
+
         <button
           onClick={onOpenVaultDialog}
           className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
-          title="Open another vault folder"
+          title={t?.openVault || "Open Vault Folder"}
         >
           <FolderOpen className="w-4 h-4" />
         </button>
@@ -127,7 +149,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
         <button
           onClick={onOpenSettings}
           className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
-          title="Settings (Ctrl+,)"
+          title={t?.settings || "Settings (Ctrl+,)"}
         >
           <Settings className="w-4 h-4" />
         </button>

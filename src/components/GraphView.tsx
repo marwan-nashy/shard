@@ -254,7 +254,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
       // Label
       if (transform.scale > 0.7 || isHovered || node.link_count > 3) {
         ctx.fillStyle = isHovered ? "#ffffff" : "#999999";
-        ctx.font = `${isHovered ? "bold " : ""}11px -apple-system, sans-serif`;
+        ctx.font = `${isHovered ? "bold " : ""}11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, "Noto Sans Arabic", sans-serif`;
         ctx.textAlign = "center";
         ctx.fillText(node.label, node.x, node.y + radius + 12);
       }

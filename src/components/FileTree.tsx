@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { FileNode } from "../types";
+import { Translations } from "../i18n";
 import {
   Folder,
   FolderOpen,
@@ -23,6 +24,7 @@ interface FileTreeProps {
   onCreateCanvas?: (parentFolder?: string) => void;
   onRenameItem: (path: string, currentName: string) => void;
   onDeleteItem: (path: string, name: string) => void;
+  t?: Translations["sidebar"];
 }
 
 export const FileTree: React.FC<FileTreeProps> = ({
@@ -34,6 +36,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
   onCreateCanvas,
   onRenameItem,
   onDeleteItem,
+  t,
 }) => {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
@@ -96,6 +99,9 @@ export const FileTree: React.FC<FileTreeProps> = ({
               ) : (
                 <Folder className="w-3.5 h-3.5 text-text-muted" />
               )}
+              <span className="truncate flex-1" dir="auto">
+                {node.name}
+              </span>
             </>
           ) : (
             <>
@@ -105,12 +111,12 @@ export const FileTree: React.FC<FileTreeProps> = ({
               ) : (
                 <FileText className="w-3.5 h-3.5 text-text-faint group-hover:text-accent-purple" />
               )}
+              <span className="truncate flex-1" dir="auto">
+                {node.name.replace(/\.md$/, "").replace(/\.canvas$/, "")}
+              </span>
             </>
           )}
 
-          <span className="truncate flex-1">
-            {node.name.replace(/\.md$/, "").replace(/\.canvas$/, "")}
-          </span>
           {isCanvas && (
             <span className="text-[9px] px-1 py-0.2 rounded bg-accent-purple/20 text-accent-purple font-mono">
               canvas
@@ -135,13 +141,13 @@ export const FileTree: React.FC<FileTreeProps> = ({
       {/* Pane Toolbar (Obsidian icons: New Note, New Canvas, New Folder, Collapse) */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
         <span className="text-[11px] font-semibold tracking-wider text-text-faint uppercase">
-          Files
+          {t?.files || "Files"}
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => onCreateNote()}
             className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover"
-            title="New note"
+            title={t?.newNote || "New note"}
           >
             <FilePlus className="w-3.5 h-3.5" />
           </button>
@@ -149,7 +155,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
             <button
               onClick={() => onCreateCanvas()}
               className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover"
-              title="New visual canvas"
+              title={t?.newCanvas || "New canvas"}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
@@ -157,14 +163,14 @@ export const FileTree: React.FC<FileTreeProps> = ({
           <button
             onClick={() => onCreateFolder()}
             className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover"
-            title="New folder"
+            title={t?.newFolder || "New folder"}
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={collapseAll}
             className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover"
-            title="Collapse all"
+            title={t?.collapseAll || "Collapse all"}
           >
             <ChevronsLeftRight className="w-3.5 h-3.5" />
           </button>
@@ -175,7 +181,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
       <div className="flex-1 overflow-y-auto px-1 py-1.5 space-y-0.5">
         {nodes.length === 0 ? (
           <div className="p-4 text-center text-xs text-text-faint">
-            No notes in this vault. Click + to create one!
+            {t?.noNotes || "No notes in this vault. Click + to create one!"}
           </div>
         ) : (
           nodes.map((node) => renderNode(node))
@@ -199,7 +205,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 className="w-full text-left px-3 py-1.5 hover:bg-bg-hover text-text-primary flex items-center gap-2"
               >
                 <FilePlus className="w-3.5 h-3.5 text-accent-purple" />
-                <span>New note here</span>
+                <span>{t?.newNote || "New note here"}</span>
               </button>
               {onCreateCanvas && (
                 <button
@@ -211,7 +217,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                   className="w-full text-left px-3 py-1.5 hover:bg-bg-hover text-text-primary flex items-center gap-2"
                 >
                   <LayoutGrid className="w-3.5 h-3.5 text-accent-purple" />
-                  <span>New canvas here</span>
+                  <span>{t?.newCanvas || "New canvas here"}</span>
                 </button>
               )}
               <button
@@ -223,7 +229,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 className="w-full text-left px-3 py-1.5 hover:bg-bg-hover text-text-primary flex items-center gap-2"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
-                <span>New folder here</span>
+                <span>{t?.newFolder || "New folder here"}</span>
               </button>
               <div className="my-1 border-t border-border-subtle" />
             </>
@@ -239,7 +245,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
               className="w-full text-left px-3 py-1.5 hover:bg-bg-hover text-text-primary flex items-center gap-2"
             >
               <Edit2 className="w-3.5 h-3.5 text-accent-blue" />
-              <span>Rename & refactor links</span>
+              <span>{t?.rename || "Rename"}</span>
             </button>
           )}
 
@@ -252,7 +258,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
             className="w-full text-left px-3 py-1.5 hover:bg-bg-hover text-accent-red flex items-center gap-2"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete</span>
+            <span>{t?.delete || "Delete"}</span>
           </button>
         </div>
       )}

@@ -12,4 +12,6 @@ node_modules/
 /.agents/
 /skills-lock.json
 /release/
+*.exe
+*.msi
 generate_icons.py

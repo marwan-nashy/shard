@@ -431,10 +431,17 @@ fn search_vault(vault_path: String, query: String) -> Result<Vec<SearchResult>, 
                 matched = true;
                 snippet = format!("Note Title: {}", stem);
             } else if let Ok(content) = fs::read_to_string(path) {
-                if let Some(pos) = content.to_lowercase().find(&q) {
+                let lower_content = content.to_lowercase();
+                if let Some(pos) = lower_content.find(&q) {
                     matched = true;
-                    let start = pos.saturating_sub(40);
-                    let end = (pos + q.len() + 60).min(content.len());
+                    let mut start = pos.saturating_sub(40);
+                    while start > 0 && !content.is_char_boundary(start) {
+                        start -= 1;
+                    }
+                    let mut end = (pos + q.len() + 60).min(content.len());
+                    while end < content.len() && !content.is_char_boundary(end) {
+                        end += 1;
+                    }
                     snippet = format!("...{}...", content[start..end].replace('\n', " "));
                 }
             }
