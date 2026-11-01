@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { appInvoke as invoke } from "./backend";
 import {
   FileNode,
   SearchResult,
