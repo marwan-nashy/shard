@@ -222,14 +222,21 @@ Enjoy writing with zero lag!
 // 6. Pick Vault Dialog
 #[tauri::command]
 fn open_vault_dialog() -> Option<String> {
-    rfd::FileDialog::new()
-        .set_title("Select Notes Vault Folder")
-        .pick_folder()
-        .map(|p| {
-            p.to_string_lossy()
-                .trim_start_matches(r"\\?\")
-                .to_string()
-        })
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        rfd::FileDialog::new()
+            .set_title("Select Notes Vault Folder")
+            .pick_folder()
+            .map(|p| {
+                p.to_string_lossy()
+                    .trim_start_matches(r"\\?\")
+                    .to_string()
+            })
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        None
+    }
 }
 
 // 7. Scan Vault File Tree
