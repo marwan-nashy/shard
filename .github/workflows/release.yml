@@ -1,133 +1,63 @@
-name: Build Linux and Mobile Releases
+name: Release and Cross-Platform Build
 
 on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag (e.g. v0.1.0)'
-        required: false
-        default: 'v0.1.0'
-
-permissions:
-  contents: write
 
 jobs:
-  build-linux:
-    name: Linux AppImage & DEB
-    runs-on: ubuntu-22.04
+  build-and-release:
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+          - platform: 'ubuntu-22.04'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system dependencies (WebKitGTK, GTK3, AppIndicator)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf squashfs-tools
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust Cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install npm dependencies
+      - name: Install Frontend Dependencies
         run: npm ci
 
-      - name: Build web app and Tauri Linux bundles
-        run: npx tauri build --bundles appimage,deb
+      - name: Build Web Frontend
+        run: npm run build
 
-      - name: Prepare Linux release artifacts
-        run: |
-          mkdir -p dist-release
-          cp src-tauri/target/release/bundle/appimage/*.AppImage dist-release/Shard-x86_64.AppImage || true
-          cp src-tauri/target/release/bundle/deb/*.deb dist-release/Shard-amd64.deb || true
-          tar -czf dist-release/Shard-linux-x86_64.tar.gz -C src-tauri/target/release shard || true
-          ls -la dist-release/
-
-      - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Build Tauri Application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: shard-linux-packages
-          path: dist-release/*
-
-      - name: Attach Linux assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
-        with:
-          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
-          files: |
-            dist-release/Shard-x86_64.AppImage
-            dist-release/Shard-amd64.deb
-            dist-release/Shard-linux-x86_64.tar.gz
-
-  build-android:
-    name: Android APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-
-      - name: Install NDK & CMake
-        run: |
-          sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
-
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Initialize Tauri Android project
-        run: npx tauri android init --ci --skip-targets-install
-
-      - name: Build Android Release APK
-        run: npx tauri android build --apk
-
-      - name: Prepare Android release artifact
-        run: |
-          mkdir -p dist-android
-          find src-tauri/gen/android -name "*.apk" -exec cp {} dist-android/Shard-Release.apk \; || true
-          ls -la dist-android/
-
-      - name: Upload Android Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: shard-android-apk
-          path: dist-android/*
-
-      - name: Attach Android APK to GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
-        with:
-          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
-          files: |
-            dist-android/Shard-Release.apk
+          tagName: v__VERSION__
+          releaseName: 'Shard v__VERSION__'
+          releaseBody: 'Zero-bloat, local-first personal knowledge base and visual canvas.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

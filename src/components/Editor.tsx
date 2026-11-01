@@ -15,6 +15,7 @@ import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/sea
 import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import katex from "katex";
+import mermaid from "mermaid";
 import { ViewMode } from "../types";
 import { FormattingToolbar } from "./FormattingToolbar";
 
@@ -30,6 +31,63 @@ export interface EditorProps {
   onToggleTextDirection?: () => void;
   onToggleZenMode?: () => void;
   isZenMode?: boolean;
+  onOpenTemplates?: () => void;
+  onOpenHistory?: () => void;
+  onExportPdf?: () => void;
+  onExportHtml?: () => void;
+}
+
+// Mermaid diagram initialization
+let mermaidInitialized = false;
+function ensureMermaidInitialized() {
+  if (!mermaidInitialized) {
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "dark",
+        securityLevel: "loose",
+        fontFamily: "inherit",
+      });
+      mermaidInitialized = true;
+    } catch {}
+  }
+}
+
+// Widget for rendering Mermaid diagrams in Live Preview
+class MermaidWidget extends WidgetType {
+  constructor(readonly code: string, readonly id: string) {
+    super();
+  }
+
+  eq(other: MermaidWidget) {
+    return other.code === this.code;
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className =
+      "cm-mermaid-diagram my-3 p-3 rounded-lg bg-bg-card/60 border border-border-subtle flex flex-col items-center justify-center overflow-x-auto select-none";
+    wrap.dir = "ltr";
+
+    const loading = document.createElement("div");
+    loading.className = "text-[11px] text-text-faint py-2 animate-pulse";
+    loading.textContent = "Rendering diagram...";
+    wrap.appendChild(loading);
+
+    ensureMermaidInitialized();
+
+    const uniqueId = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+    mermaid
+      .render(uniqueId, this.code.trim())
+      .then(({ svg }) => {
+        wrap.innerHTML = svg;
+      })
+      .catch((err) => {
+        wrap.innerHTML = `<div class="text-xs text-accent-orange p-2 font-mono">Mermaid Syntax Error: ${err?.message || "Invalid diagram syntax"}</div><pre class="text-[10px] text-text-faint font-mono whitespace-pre">${this.code}</pre>`;
+      });
+
+    return wrap;
+  }
 }
 
 // Widget for interactive checkbox toggling
@@ -204,6 +262,7 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
 
         let inCodeBlock = false;
         let codeBlockLang = "";
+        let codeBlockStartLine = 0;
 
         const getCodeSnippet = (startLineNum: number) => {
           const lines: string[] = [];
@@ -228,6 +287,7 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
               if (!inCodeBlock) {
                 inCodeBlock = true;
                 codeBlockLang = codeBlockMatch[1] || "";
+                codeBlockStartLine = line.number;
                 widgets.push(
                   Decoration.widget({
                     widget: new CodeBlockHeaderWidget(codeBlockLang, () =>
@@ -246,6 +306,19 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
                     lineStart
                   )
                 );
+
+                // If this is a Mermaid diagram block, render the MermaidWidget
+                if (codeBlockLang.toLowerCase() === "mermaid") {
+                  const mCode = getCodeSnippet(codeBlockStartLine);
+                  if (mCode.trim()) {
+                    widgets.push(
+                      Decoration.widget({
+                        widget: new MermaidWidget(mCode, `mm-${codeBlockStartLine}`),
+                        side: 1,
+                      }).range(line.to)
+                    );
+                  }
+                }
               }
               pos = line.to + 1;
               continue;
@@ -441,6 +514,10 @@ export const Editor: React.FC<EditorProps> = ({
   onToggleTextDirection,
   onToggleZenMode,
   isZenMode,
+  onOpenTemplates,
+  onOpenHistory,
+  onExportPdf,
+  onExportHtml,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -478,6 +555,8 @@ export const Editor: React.FC<EditorProps> = ({
       { label: "/code", detail: "Code Block", apply: "```javascript\n\n```" },
       { label: "/table", detail: "Markdown Table", apply: "\n| Column 1 | Column 2 |\n| :--- | :--- |\n| Item 1 | Item 2 |\n" },
       { label: "/math", detail: "LaTeX Math Block", apply: "\n$$\nE = mc^2\n$$\n" },
+      { label: "/mermaid", detail: "Mermaid Diagram", apply: "\n```mermaid\nflowchart TD\n    A[Start] --> B(Step)\n    B --> C[Done]\n```\n" },
+      { label: "/footnote", detail: "Footnote Link", apply: "[^1]\n\n[^1]: Details here\n" },
       { label: "/divider", detail: "Horizontal Rule", apply: "\n---\n" },
     ];
 
@@ -512,6 +591,18 @@ export const Editor: React.FC<EditorProps> = ({
     };
   };
 
+  // Insert arbitrary text at cursor (used by templates & voice dictation)
+  const handleInsertText = (text: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor: from + text.length },
+    });
+    view.focus();
+  };
+
   // Formatting Toolbar Action Handler
   const handleApplyFormat = (type: string, arg?: string) => {
     const view = viewRef.current;
@@ -543,6 +634,14 @@ export const Editor: React.FC<EditorProps> = ({
       case "math":
         wrapSelection(view, "$", "$");
         break;
+      case "mermaid": {
+        const diagram = `\n\`\`\`mermaid\nflowchart TD\n    A[Start] --> B(Process)\n    B --> C{Decision}\n    C -->|Yes| D[Done]\n    C -->|No| B\n\`\`\`\n`;
+        view.dispatch({
+          changes: { from, to, insert: diagram },
+          selection: { anchor: from + diagram.length },
+        });
+        break;
+      }
       case "h1":
       case "h2":
       case "h3":
@@ -776,6 +875,7 @@ export const Editor: React.FC<EditorProps> = ({
       {/* Visual Formatting Toolbar */}
       <FormattingToolbar
         onApplyFormat={handleApplyFormat}
+        onInsertText={handleInsertText}
         wordCount={wordCount}
         charCount={charCount}
         readingTimeMinutes={readingTimeMinutes}
@@ -783,6 +883,10 @@ export const Editor: React.FC<EditorProps> = ({
         onToggleTextDirection={onToggleTextDirection}
         onToggleZenMode={onToggleZenMode}
         isZenMode={isZenMode}
+        onOpenTemplates={onOpenTemplates}
+        onOpenHistory={onOpenHistory}
+        onExportPdf={onExportPdf}
+        onExportHtml={onExportHtml}
       />
 
       {/* CodeMirror Scroller Container */}

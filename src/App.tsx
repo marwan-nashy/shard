@@ -37,8 +37,13 @@ import {
   Minimize2,
 } from "lucide-react";
 import { Language, TextDirection, translations } from "./i18n";
-import { ThemePreset } from "./types";
+import { ThemePreset, BookmarkItem } from "./types";
 import { LocalGraph } from "./components/LocalGraph";
+import { TemplateModal } from "./components/TemplateModal";
+import { HistoryModal } from "./components/HistoryModal";
+import { VaultStatsModal } from "./components/VaultStatsModal";
+import { exportNoteToPdf, exportNoteToHtml } from "./utils/documentExport";
+import { saveNoteSnapshot } from "./utils/versionHistory";
 
 export default function App() {
   // Language & Direction state
@@ -149,6 +154,36 @@ export default function App() {
     oldName: string;
     newName: string;
   }>({ isOpen: false, path: "", oldName: "", newName: "" });
+
+  // Bookmarks State
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("shard_bookmarks");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleToggleBookmark = (path: string, title?: string, type: "note" | "canvas" = "note") => {
+    setBookmarks((prev) => {
+      const exists = prev.some((b) => b.path === path);
+      let updated: BookmarkItem[];
+      if (exists) {
+        updated = prev.filter((b) => b.path !== path);
+      } else {
+        const t = title || path.split(/[\\/]/).pop()?.replace(/\.(md|canvas)$/, "") || "Untitled";
+        updated = [...prev, { path, title: t, type }];
+      }
+      localStorage.setItem("shard_bookmarks", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Modals for Templates, History, and Analytics
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
 
   // Graph data & Backlinks
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
@@ -351,6 +386,9 @@ export default function App() {
         content: activeContent,
       });
 
+      // Save revision snapshot
+      saveNoteSnapshot(activePath, activeContent);
+
       setTabs((prev) =>
         prev.map((t) => (t.path === activePath ? { ...t, isDirty: false } : t))
       );
@@ -370,6 +408,24 @@ export default function App() {
     } catch (err) {
       console.error(err);
       setStatusMessage(`Save failed: ${err}`);
+    }
+  };
+
+  const handleExportPdf = () => exportNoteToPdf(activeTitle);
+  const handleExportHtml = () => exportNoteToHtml(activeTitle, activeContent, theme);
+
+  const handleUpdateNoteContent = async (path: string, newContent: string) => {
+    try {
+      await invoke("write_file_content", { filePath: path, content: newContent });
+      if (path === activePath) {
+        setActiveContent(newContent);
+        setTabs((prev) =>
+          prev.map((t) => (t.path === path ? { ...t, isDirty: false } : t))
+        );
+      }
+      saveNoteSnapshot(path, newContent);
+    } catch (err) {
+      console.error("Failed to update note content:", err);
     }
   };
 
@@ -740,6 +796,21 @@ export default function App() {
       case "toggle-zen":
         toggleZenMode();
         break;
+      case "open-templates":
+        setTemplateModalOpen(true);
+        break;
+      case "open-history":
+        setHistoryModalOpen(true);
+        break;
+      case "open-stats":
+        setStatsModalOpen(true);
+        break;
+      case "export-pdf":
+        handleExportPdf();
+        break;
+      case "export-html":
+        handleExportHtml();
+        break;
       default:
         break;
     }
@@ -816,6 +887,18 @@ export default function App() {
           // Clean initial start: Show the Vault Selector Welcome modal
           setVaultSelectorOpen(true);
         }
+
+        // Deep linking check (?note=... or ?open=...)
+        const params = new URLSearchParams(window.location.search);
+        const targetNote = params.get("note") || params.get("open");
+        if (targetNote) {
+          setTimeout(() => {
+            const match = allNotes.find(
+              (n) => n.title.toLowerCase() === targetNote.toLowerCase()
+            );
+            if (match) openNote(match.path);
+          }, 600);
+        }
       } catch (err) {
         console.error("Initialization error:", err);
         setVaultSelectorOpen(true);
@@ -844,13 +927,14 @@ export default function App() {
             onOpenCanvas={handleOpenCanvasView}
             onOpenVaultDialog={() => setVaultSelectorOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenStats={() => setStatsModalOpen(true)}
             t={t.ribbon}
             textDirection={textDirection}
             onToggleTextDirection={cycleTextDirection}
           />
         )}
 
-        {/* 2. Left Multi-Tab Sidebar (Files, Search, Tags, Outline) */}
+        {/* 2. Left Multi-Tab Sidebar (Files, Search, Tags, Outline, Tasks, Bookmarks) */}
         {!isZenMode &&
           leftSidebarOpen &&
           (isMobile ? (
@@ -885,6 +969,9 @@ export default function App() {
                   activeContent={activeContent}
                   onJumpToHeading={(heading) => setTargetHeading(heading)}
                   onCreateDailyNote={handleDailyNote}
+                  bookmarks={bookmarks}
+                  onToggleBookmark={handleToggleBookmark}
+                  onUpdateNoteContent={handleUpdateNoteContent}
                   t={t.sidebar}
                 />
               </div>
@@ -916,6 +1003,9 @@ export default function App() {
                 activeContent={activeContent}
                 onJumpToHeading={(heading) => setTargetHeading(heading)}
                 onCreateDailyNote={handleDailyNote}
+                bookmarks={bookmarks}
+                onToggleBookmark={handleToggleBookmark}
+                onUpdateNoteContent={handleUpdateNoteContent}
                 t={t.sidebar}
               />
             </div>
@@ -1026,6 +1116,10 @@ export default function App() {
                       onToggleTextDirection={cycleTextDirection}
                       onToggleZenMode={toggleZenMode}
                       isZenMode={isZenMode}
+                      onOpenTemplates={() => setTemplateModalOpen(true)}
+                      onOpenHistory={() => setHistoryModalOpen(true)}
+                      onExportPdf={handleExportPdf}
+                      onExportHtml={handleExportHtml}
                     />
                   </div>
 
@@ -1482,6 +1576,44 @@ export default function App() {
           <span>Exit Focus (Esc)</span>
         </button>
       )}
+
+      {/* Smart Templates Modal */}
+      <TemplateModal
+        isOpen={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        noteTitle={activeTitle}
+        onInsertTemplate={(tmpl) => {
+          if (activeContent) {
+            handleUpdateNoteContent(activePath!, `${activeContent}\n\n${tmpl}`);
+          } else if (activePath) {
+            handleUpdateNoteContent(activePath, tmpl);
+          }
+        }}
+      />
+
+      {/* Note Version History Modal */}
+      <HistoryModal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        activePath={activePath}
+        currentContent={activeContent}
+        onRestoreContent={(restored) => {
+          if (activePath) {
+            handleUpdateNoteContent(activePath, restored);
+            setStatusMessage("Note restored to previous revision.");
+          }
+        }}
+      />
+
+      {/* Vault Statistics & Heatmap Modal */}
+      <VaultStatsModal
+        isOpen={statsModalOpen}
+        onClose={() => setStatsModalOpen(false)}
+        allNotes={allNotes}
+        allTags={allTags}
+        graphData={graphData}
+        onNavigateToNote={(path) => openNote(path)}
+      />
     </div>
   );
 }

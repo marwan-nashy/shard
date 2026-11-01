@@ -21,10 +21,18 @@ import {
   Flame,
   HelpCircle,
   AlignRight,
+  Mic,
+  MicOff,
+  Sparkles,
+  History,
+  GitFork,
+  Printer,
+  FileDown,
 } from "lucide-react";
 
 interface FormattingToolbarProps {
   onApplyFormat: (type: string, arg?: string) => void;
+  onInsertText?: (text: string) => void;
   wordCount: number;
   charCount: number;
   readingTimeMinutes: number;
@@ -32,10 +40,15 @@ interface FormattingToolbarProps {
   onToggleTextDirection?: () => void;
   onToggleZenMode?: () => void;
   isZenMode?: boolean;
+  onOpenTemplates?: () => void;
+  onOpenHistory?: () => void;
+  onExportPdf?: () => void;
+  onExportHtml?: () => void;
 }
 
 export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
   onApplyFormat,
+  onInsertText,
   wordCount,
   charCount,
   readingTimeMinutes,
@@ -43,9 +56,15 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
   onToggleTextDirection,
   onToggleZenMode,
   isZenMode,
+  onOpenTemplates,
+  onOpenHistory,
+  onExportPdf,
+  onExportHtml,
 }) => {
   const [calloutMenuOpen, setCalloutMenuOpen] = useState(false);
   const [headingMenuOpen, setHeadingMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   const callouts = [
     { type: "NOTE", label: "Note", icon: Info, color: "text-accent-blue" },
@@ -54,6 +73,44 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
     { type: "CAUTION", label: "Caution", icon: Flame, color: "text-accent-red" },
     { type: "EXAMPLE", label: "Example", icon: HelpCircle, color: "text-accent-purple" },
   ];
+
+  // Speech-to-Text Voice Dictation (English & Arabic support)
+  const toggleDictation = () => {
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRec) {
+      alert("Speech recognition is not supported in this browser or environment.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRec();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = textDirection === "rtl" ? "ar-EG" : "en-US";
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript && onInsertText) {
+          onInsertText(` ${transcript} `);
+        }
+        setIsListening(false);
+      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+
+      recognition.start();
+    } catch {
+      setIsListening(false);
+    }
+  };
 
   return (
     <div className="h-9 bg-bg-secondary/90 backdrop-blur-sm border-b border-border-subtle flex items-center justify-between px-3 text-xs select-none shrink-0 z-10 overflow-x-auto no-scrollbar gap-2">
@@ -233,12 +290,98 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
           <Sigma className="w-3.5 h-3.5" />
         </button>
         <button
+          onClick={() => onApplyFormat("mermaid")}
+          className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+          title="Mermaid Diagram Flowchart"
+        >
+          <GitFork className="w-3.5 h-3.5" />
+        </button>
+        <button
           onClick={() => onApplyFormat("divider")}
           className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover"
           title="Horizontal Rule (---)"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
+
+        <div className="w-[1px] h-4 bg-border-subtle mx-1" />
+
+        {/* Voice Dictation (Speech-to-Text) */}
+        <button
+          onClick={toggleDictation}
+          className={`p-1 rounded transition-all flex items-center gap-1 ${
+            isListening
+              ? "text-red-500 bg-red-500/15 animate-pulse shadow-xs"
+              : "text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+          }`}
+          title={
+            isListening
+              ? "Listening... Speak now (English or Arabic)"
+              : "Voice Dictation (Speech to Text)"
+          }
+        >
+          {isListening ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 opacity-80" />}
+        </button>
+
+        {/* Smart Templates Button */}
+        {onOpenTemplates && (
+          <button
+            onClick={onOpenTemplates}
+            className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+            title="Insert Template (Meeting, Journal, Roadmap)"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Note Revision History */}
+        {onOpenHistory && (
+          <button
+            onClick={onOpenHistory}
+            className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+            title="Note Version History (Timeline Snapshots)"
+          >
+            <History className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Export Dropdown */}
+        {(onExportPdf || onExportHtml) && (
+          <div className="relative">
+            <button
+              onClick={() => setExportMenuOpen(!exportMenuOpen)}
+              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover flex items-center"
+              title="Export Note (PDF / HTML)"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+            </button>
+            {exportMenuOpen && (
+              <div
+                className="absolute top-full left-0 mt-1 w-36 bg-bg-card border border-border-subtle rounded-md shadow-2xl py-1 z-50 animate-in fade-in duration-150"
+                onClick={() => setExportMenuOpen(false)}
+              >
+                {onExportPdf && (
+                  <button
+                    onClick={onExportPdf}
+                    className="w-full text-left px-3 py-1 hover:bg-bg-hover text-text-primary text-xs flex items-center gap-2"
+                  >
+                    <Printer className="w-3 h-3 text-accent-blue" />
+                    <span>Print to PDF</span>
+                  </button>
+                )}
+                {onExportHtml && (
+                  <button
+                    onClick={onExportHtml}
+                    className="w-full text-left px-3 py-1 hover:bg-bg-hover text-text-primary text-xs flex items-center gap-2"
+                  >
+                    <FileDown className="w-3 h-3 text-accent-emerald" />
+                    <span>Export HTML</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right Stats & Zen Mode Group */}

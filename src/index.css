@@ -431,4 +431,41 @@ html.theme-paper {
   --color-text-faint: #888888;
 }
 
+/* Print / PDF Export Stylesheet */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: auto !important;
+  }
+
+  /* Hide app chrome during printing */
+  .cm-callout-badge,
+  .cm-math-block,
+  .cm-math-inline,
+  .cm-mermaid-diagram {
+    break-inside: avoid;
+  }
+
+  .cm-editor,
+  .cm-scroller,
+  .cm-content {
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 12pt !important;
+    color: #000000 !important;
+  }
+
+  .cm-line {
+    color: #000000 !important;
+  }
+
+  .cm-header-1 { font-size: 22pt !important; font-weight: bold !important; border-bottom: 1px solid #ccc; }
+  .cm-header-2 { font-size: 17pt !important; font-weight: bold !important; }
+  .cm-header-3 { font-size: 14pt !important; font-weight: bold !important; }
+}
+
 

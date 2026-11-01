@@ -1,14 +1,18 @@
 import React, { useState, useMemo } from "react";
-import { FileNode, SearchResult, SidebarTab, OutlineItem } from "../types";
+import { FileNode, SearchResult, SidebarTab, OutlineItem, BookmarkItem } from "../types";
 import { Translations } from "../i18n";
 import { FileTree } from "./FileTree";
 import { CalendarPane } from "./CalendarPane";
+import { TasksPane } from "./TasksPane";
+import { BookmarksPane } from "./BookmarksPane";
 import {
   Folder,
   Search,
   Tag,
   ListTree,
   Calendar as CalendarIcon,
+  CheckSquare,
+  Bookmark as BookmarkIcon,
   FileText,
   X,
   ChevronRight,
@@ -37,6 +41,9 @@ interface LeftSidebarProps {
   activeContent: string;
   onJumpToHeading: (headingTitle: string) => void;
   onCreateDailyNote?: (dateStr: string) => void;
+  bookmarks?: BookmarkItem[];
+  onToggleBookmark?: (path: string, title?: string, type?: "note" | "canvas") => void;
+  onUpdateNoteContent?: (path: string, newContent: string) => void;
   t?: Translations["sidebar"];
 }
 
@@ -58,6 +65,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   activeContent,
   onJumpToHeading,
   onCreateDailyNote,
+  bookmarks = [],
+  onToggleBookmark,
+  onUpdateNoteContent,
   t,
 }) => {
   // Search View State
@@ -167,6 +177,30 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           title="Daily Notes Calendar"
         >
           <CalendarIcon className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          onClick={() => onTabChange("tasks")}
+          className={`p-1.5 rounded transition-colors ${
+            activeTab === "tasks"
+              ? "bg-bg-card text-accent-purple font-medium"
+              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+          }`}
+          title="Vault Tasks"
+        >
+          <CheckSquare className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          onClick={() => onTabChange("bookmarks")}
+          className={`p-1.5 rounded transition-colors ${
+            activeTab === "bookmarks"
+              ? "bg-bg-card text-accent-purple font-medium"
+              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+          }`}
+          title="Bookmarks"
+        >
+          <BookmarkIcon className="w-3.5 h-3.5" />
         </button>
 
         <button
@@ -376,6 +410,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               )}
             </div>
           </div>
+        )}
+
+        {/* TAB 6: TASKS (Vault Tasks Aggregator) */}
+        {activeTab === "tasks" && (
+          <TasksPane
+            allNotes={allNotes}
+            onNavigateToNote={onNavigateToNote}
+            activePath={activePath}
+            activeContent={activeContent}
+            onUpdateNoteContent={onUpdateNoteContent}
+          />
+        )}
+
+        {/* TAB 7: BOOKMARKS (Pinned Items) */}
+        {activeTab === "bookmarks" && (
+          <BookmarksPane
+            bookmarks={bookmarks}
+            onToggleBookmark={onToggleBookmark || (() => {})}
+            onNavigateToNote={onNavigateToNote}
+            activePath={activePath}
+          />
         )}
       </div>
     </div>

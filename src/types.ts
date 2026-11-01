@@ -52,9 +52,46 @@ export interface TabItem {
 }
 
 export type ViewMode = "live" | "source";
-export type SidebarTab = "files" | "search" | "tags" | "outline" | "calendar";
+export type SidebarTab =
+  | "files"
+  | "search"
+  | "tags"
+  | "outline"
+  | "calendar"
+  | "tasks"
+  | "bookmarks";
 export type RightSidebarTab = "backlinks" | "outline" | "localgraph";
 export type ThemePreset = "shard" | "oled" | "catppuccin" | "nord" | "paper";
+
+export interface TaskItem {
+  id: string;
+  path: string;
+  noteTitle: string;
+  line: number;
+  text: string;
+  completed: boolean;
+}
+
+export interface NoteRevision {
+  id: string;
+  timestamp: number;
+  dateStr: string;
+  content: string;
+  wordCount: number;
+}
+
+export interface BookmarkItem {
+  path: string;
+  title: string;
+  type: "note" | "canvas";
+}
+
+export interface TemplateItem {
+  id: string;
+  title: string;
+  description: string;
+  content: string;
+}
 
 export interface OutlineItem {
   level: number;

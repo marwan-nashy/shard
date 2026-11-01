@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   FileText,
   AlignRight,
+  BarChart3,
 } from "lucide-react";
 import { Translations, TextDirection } from "../i18n";
 
@@ -21,6 +22,7 @@ interface RibbonProps {
   onOpenCanvas?: () => void;
   onOpenVaultDialog: () => void;
   onOpenSettings: () => void;
+  onOpenStats?: () => void;
   t?: Translations["ribbon"];
   textDirection?: TextDirection;
   onToggleTextDirection?: () => void;
@@ -35,6 +37,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
   onOpenCanvas,
   onOpenVaultDialog,
   onOpenSettings,
+  onOpenStats,
   t,
   textDirection = "auto",
   onToggleTextDirection,
@@ -120,6 +123,16 @@ export const Ribbon: React.FC<RibbonProps> = ({
         >
           <Terminal className="w-4 h-4" />
         </button>
+
+        {onOpenStats && (
+          <button
+            onClick={onOpenStats}
+            className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
+            title="Vault Analytics & Heatmap"
+          >
+            <BarChart3 className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Bottom Pinned Icons */}
