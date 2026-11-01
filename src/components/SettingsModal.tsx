@@ -1,6 +1,19 @@
 import React, { useState } from "react";
-import { X, Sliders, Palette, Zap, Keyboard, Info, Globe } from "lucide-react";
+import {
+  X,
+  Sliders,
+  Palette,
+  Zap,
+  Keyboard,
+  Info,
+  Globe,
+  Download,
+  Archive,
+  Check,
+} from "lucide-react";
 import { Language, TextDirection, Translations } from "../i18n";
+import { ThemePreset } from "../types";
+import { exportVaultAsZip } from "../utils/vaultBackup";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,6 +22,9 @@ interface SettingsModalProps {
   onLanguageChange: (lang: Language) => void;
   textDirection: TextDirection;
   onTextDirectionChange: (dir: TextDirection) => void;
+  currentTheme?: ThemePreset;
+  onThemeChange?: (theme: ThemePreset) => void;
+  vaultPath?: string | null;
   t?: Translations["settings"];
 }
 
@@ -19,13 +35,69 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onLanguageChange,
   textDirection,
   onTextDirectionChange,
+  currentTheme = "shard",
+  onThemeChange,
+  vaultPath = null,
   t,
 }) => {
   const [activeTab, setActiveTab] = useState<
     "general" | "language" | "appearance" | "plugins" | "hotkeys" | "about"
   >("language");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   if (!isOpen) return null;
+
+  const themes: { id: ThemePreset; name: string; desc: string; bg: string; accent: string }[] = [
+    {
+      id: "shard",
+      name: "Shard Nebula",
+      desc: "Default modern charcoal with purple glow",
+      bg: "#1e1e1e",
+      accent: "#7b6cd9",
+    },
+    {
+      id: "oled",
+      name: "OLED Pure Black",
+      desc: "True #000000 for battery saving & high contrast",
+      bg: "#000000",
+      accent: "#7b6cd9",
+    },
+    {
+      id: "catppuccin",
+      name: "Catppuccin Mocha",
+      desc: "Soothing pastel dark palette",
+      bg: "#1e1e2e",
+      accent: "#cba6f7",
+    },
+    {
+      id: "nord",
+      name: "Nord",
+      desc: "Cool arctic blue-gray aesthetic",
+      bg: "#2e3440",
+      accent: "#88c0d0",
+    },
+    {
+      id: "paper",
+      name: "Warm Paper (Light)",
+      desc: "Eye-friendly sepia for daytime reading",
+      bg: "#fbfbf9",
+      accent: "#6c52b5",
+    },
+  ];
+
+  const handleExportZip = async () => {
+    setIsExporting(true);
+    try {
+      await exportVaultAsZip(vaultPath);
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 2500);
+    } catch (e) {
+      console.error("Export failed:", e);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div
@@ -33,7 +105,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl h-[520px] bg-bg-card border border-border-subtle rounded-xl shadow-2xl flex flex-col overflow-hidden text-xs"
+        className="w-full max-w-2xl h-[530px] bg-bg-card border border-border-subtle rounded-xl shadow-2xl flex flex-col overflow-hidden text-xs"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -52,7 +124,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Body Split */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left Navigation */}
-          <div className="w-48 bg-bg-secondary/70 border-r border-border-subtle p-2 space-y-1">
+          <div className="w-48 bg-bg-secondary/70 border-r border-border-subtle p-2 space-y-1 shrink-0">
             <button
               onClick={() => setActiveTab("language")}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-colors ${
@@ -64,16 +136,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Globe className="w-4 h-4 text-accent-purple" /> {t?.language || "Language & Direction"}
             </button>
             <button
-              onClick={() => setActiveTab("general")}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-colors ${
-                activeTab === "general"
-                  ? "bg-bg-card text-white font-medium border-l-2 border-accent-purple"
-                  : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-              }`}
-            >
-              <Sliders className="w-4 h-4" /> {t?.general || "General"}
-            </button>
-            <button
               onClick={() => setActiveTab("appearance")}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-colors ${
                 activeTab === "appearance"
@@ -81,7 +143,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
               }`}
             >
-              <Palette className="w-4 h-4" /> {t?.appearance || "Appearance"}
+              <Palette className="w-4 h-4" /> {t?.appearance || "Appearance & Themes"}
+            </button>
+            <button
+              onClick={() => setActiveTab("general")}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-colors ${
+                activeTab === "general"
+                  ? "bg-bg-card text-white font-medium border-l-2 border-accent-purple"
+                  : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+              }`}
+            >
+              <Sliders className="w-4 h-4" /> {t?.general || "General & Backup"}
             </button>
             <button
               onClick={() => setActiveTab("plugins")}
@@ -111,65 +183,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
               }`}
             >
-              <Info className="w-4 h-4" /> {t?.about || "About"}
+              <Info className="w-4 h-4" /> {t?.about || "About Shard"}
             </button>
           </div>
 
-          {/* Right Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Right Pane Content */}
+          <div className="flex-1 p-5 overflow-y-auto">
             {/* 1. Language & Direction Tab */}
             {activeTab === "language" && (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div>
                   <h3 className="text-sm font-semibold text-text-primary">
-                    {t?.language || "Language & Direction"}
+                    {t?.appLanguage || "Interface Language"}
                   </h3>
                   <p className="text-text-faint text-[11px] mt-0.5">
-                    Shard supports full bidirectional editing, Arabic script, and multilingual UI.
+                    Choose your preferred language for menus and buttons.
                   </p>
-                </div>
-
-                {/* Application Language Selector */}
-                <div className="p-3.5 bg-bg-secondary rounded-lg border border-border-subtle space-y-2.5">
-                  <span className="text-text-primary font-medium block">
-                    {t?.appLanguage || "Application Language"}
-                  </span>
-                  <div className="flex items-center gap-2.5">
+                  <div className="grid grid-cols-2 gap-3 mt-3">
                     <button
                       onClick={() => onLanguageChange("en")}
-                      className={`px-3.5 py-1.5 rounded-lg font-medium transition-all ${
+                      className={`p-3 rounded-lg text-left transition-all border ${
                         language === "en"
-                          ? "bg-accent-purple text-white shadow-md shadow-accent-purple/20"
-                          : "bg-bg-card border border-border-subtle text-text-muted hover:text-text-primary"
+                          ? "bg-bg-card border-accent-purple text-white shadow-sm"
+                          : "bg-bg-card/40 border-border-subtle text-text-muted hover:text-text-primary hover:bg-bg-card"
                       }`}
                     >
-                      English
+                      <div className="font-semibold text-xs">English</div>
+                      <div className="text-[10px] text-text-faint mt-0.5">Default interface language</div>
                     </button>
+
                     <button
                       onClick={() => onLanguageChange("ar")}
-                      className={`px-3.5 py-1.5 rounded-lg font-medium transition-all ${
+                      className={`p-3 rounded-lg text-left transition-all border ${
                         language === "ar"
-                          ? "bg-accent-purple text-white shadow-md shadow-accent-purple/20"
-                          : "bg-bg-card border border-border-subtle text-text-muted hover:text-text-primary"
+                          ? "bg-bg-card border-accent-purple text-white shadow-sm"
+                          : "bg-bg-card/40 border-border-subtle text-text-muted hover:text-text-primary hover:bg-bg-card"
                       }`}
                     >
-                      العربية (Arabic)
+                      <div className="font-semibold text-xs font-sans">العربية (Arabic)</div>
+                      <div className="text-[10px] text-text-faint mt-0.5">واجهة مستخدم معربة بالكامل مع RTL</div>
                     </button>
                   </div>
                 </div>
 
-                {/* Default Document Text Direction */}
-                <div className="p-3.5 bg-bg-secondary rounded-lg border border-border-subtle space-y-2.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-text-primary font-medium block">
-                      {t?.textDirection || "Default Text Direction"}
-                    </span>
-                    <span className="text-[10px] text-text-faint font-mono">
-                      Shortcut: Ctrl+Shift+X
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="pt-2 border-t border-border-subtle">
+                  <h3 className="text-sm font-semibold text-text-primary">
+                    {t?.textDirection || "Text Direction Behavior"}
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
                     <button
                       onClick={() => onTextDirectionChange("auto")}
                       className={`p-2 rounded-lg text-left transition-all border ${
@@ -179,9 +240,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }`}
                     >
                       <div className="font-semibold text-xs">Auto / تلقائي</div>
-                      <div className="text-[10px] text-text-faint mt-0.5">
-                        Detects each line's direction dynamically.
-                      </div>
+                      <div className="text-[10px] text-text-faint mt-0.5">Detects per line</div>
                     </button>
 
                     <button
@@ -192,10 +251,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           : "bg-bg-card/50 border-border-subtle text-text-muted hover:text-text-primary hover:bg-bg-card"
                       }`}
                     >
-                      <div className="font-semibold text-xs">RTL / يمين لليسار</div>
-                      <div className="text-[10px] text-text-faint mt-0.5">
-                        Forces right-to-left alignment (Arabic).
-                      </div>
+                      <div className="font-semibold text-xs">RTL / يمين ليسار</div>
+                      <div className="text-[10px] text-text-faint mt-0.5">Arabic default</div>
                     </button>
 
                     <button
@@ -207,98 +264,105 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }`}
                     >
                       <div className="font-semibold text-xs">LTR / يسار ليمين</div>
-                      <div className="text-[10px] text-text-faint mt-0.5">
-                        Forces left-to-right alignment (English).
-                      </div>
+                      <div className="text-[10px] text-text-faint mt-0.5">English default</div>
                     </button>
                   </div>
                 </div>
-
-                {/* Typography info */}
-                <div className="p-3 bg-bg-secondary/60 rounded-lg border border-border-subtle text-text-faint text-[11px] leading-relaxed">
-                  <span className="font-semibold text-text-muted">Arabic Typography: </span>
-                  {t?.fontHint || "Arabic text renders with optimal Cairo, Segoe UI, and Tahoma typography."}
-                </div>
               </div>
             )}
 
-            {/* 2. Hotkeys Tab */}
-            {activeTab === "hotkeys" && (
+            {/* 2. Appearance & Themes Tab */}
+            {activeTab === "appearance" && (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold text-text-primary">
-                    {t?.shortcutsTitle || "Keyboard Shortcuts"}
+                    Theme Presets
                   </h3>
                   <p className="text-text-faint text-[11px] mt-0.5">
-                    {t?.shortcutsDesc || "Modifiers strictly appear before letters."}
+                    Select your color theme. Themes apply instantly across all panes and the visual canvas.
                   </p>
                 </div>
 
-                <div className="space-y-2 divide-y divide-border-subtle/50">
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Quick Switcher / Search</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + O
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Command Palette</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + P
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Toggle Text Direction (Auto / RTL / LTR)</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + Shift + X
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Save Active Note</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + S
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Open 2D Graph View</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + G
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Toggle Live Preview / Source</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + E
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Open Settings</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Ctrl + ,
-                    </span>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-text-primary">Close Dialog or Overlay</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono text-[11px]">
-                      Escape
-                    </span>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {themes.map((th) => {
+                    const isSelected = currentTheme === th.id;
+                    return (
+                      <button
+                        key={th.id}
+                        onClick={() => onThemeChange && onThemeChange(th.id)}
+                        className={`p-3 rounded-lg text-left border transition-all flex items-start justify-between ${
+                          isSelected
+                            ? "border-accent-purple bg-bg-card shadow-md"
+                            : "border-border-subtle bg-bg-secondary/40 hover:bg-bg-hover hover:border-text-faint"
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-sm shrink-0"
+                              style={{ backgroundColor: th.bg }}
+                            />
+                            <span className="font-semibold text-xs text-text-primary">
+                              {th.name}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-text-faint">
+                            {th.desc}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <Check className="w-4 h-4 text-accent-purple shrink-0 mt-0.5" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* 3. Appearance Tab */}
-            {activeTab === "appearance" && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-text-primary">
-                  {t?.appearance || "Appearance"}
-                </h3>
-                <div className="p-3 bg-bg-secondary rounded-lg border border-border-subtle space-y-2">
-                  <span className="text-text-primary font-medium">{t?.themeTitle || "Base Color Theme"}</span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="px-3 py-1.5 rounded bg-bg-card border border-accent-purple text-accent-purple font-medium">
-                      Neutral Charcoal (#1e1e1e)
+            {/* 3. General & Backup Tab */}
+            {activeTab === "general" && (
+              <div className="space-y-5">
+                <div>
+                  <h3 className="text-sm font-semibold text-text-primary">
+                    {t?.general || "General"}
+                  </h3>
+                  <div className="p-3 bg-bg-secondary rounded-lg border border-border-subtle mt-2 space-y-1">
+                    <div className="font-medium text-text-primary">Auto Save</div>
+                    <div className="text-[11px] text-text-faint leading-relaxed">
+                      {t?.autoSaveDesc ||
+                        "Notes are automatically saved on edit and debounced safely to local disk with zero cloud latency."}
                     </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-border-subtle">
+                  <h3 className="text-sm font-semibold text-text-primary">
+                    Vault Backup & Portability
+                  </h3>
+                  <p className="text-text-faint text-[11px] mt-0.5">
+                    Export your entire Markdown knowledge base and visual canvas files into a single standalone ZIP archive.
+                  </p>
+
+                  <div className="mt-3 p-3 bg-bg-secondary rounded-lg border border-border-subtle flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-text-primary flex items-center gap-1.5">
+                        <Archive className="w-4 h-4 text-accent-purple" />
+                        <span>Export Vault (.zip)</span>
+                      </div>
+                      <div className="text-[10px] text-text-faint mt-0.5">
+                        Download full offline backup with all notes and .canvas files
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleExportZip}
+                      disabled={isExporting}
+                      className="px-3 py-1.5 rounded-md bg-accent-purple hover:bg-accent-purple-hover text-white font-medium text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>{isExporting ? "Exporting..." : exportSuccess ? "Downloaded!" : "Export ZIP"}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -310,49 +374,98 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <h3 className="text-sm font-semibold text-text-primary">
                   {t?.plugins || "Core Plugins"}
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <div className="flex items-center justify-between p-2.5 bg-bg-secondary rounded-lg border border-border-subtle">
                     <div>
-                      <div className="font-medium text-text-primary">Backlinks</div>
+                      <div className="font-medium text-text-primary">Backlinks & Mentions</div>
                       <div className="text-[11px] text-text-faint">
-                        Display linked and unlinked mentions.
+                        Display linked and unlinked mentions with instant jump.
                       </div>
                     </div>
-                    <span className="text-accent-green font-semibold">Enabled</span>
+                    <span className="text-accent-green font-semibold text-[11px]">Active</span>
                   </div>
+
                   <div className="flex items-center justify-between p-2.5 bg-bg-secondary rounded-lg border border-border-subtle">
                     <div>
-                      <div className="font-medium text-text-primary">Graph View</div>
+                      <div className="font-medium text-text-primary">Local Graph & Global Graph</div>
                       <div className="text-[11px] text-text-faint">
-                        Force-directed graph view of note links.
+                        Interactive force-directed 2D network simulation.
                       </div>
                     </div>
-                    <span className="text-accent-green font-semibold">Enabled</span>
+                    <span className="text-accent-green font-semibold text-[11px]">Active</span>
                   </div>
+
                   <div className="flex items-center justify-between p-2.5 bg-bg-secondary rounded-lg border border-border-subtle">
                     <div>
-                      <div className="font-medium text-text-primary">Visual Canvas</div>
+                      <div className="font-medium text-text-primary">Visual Infinite Canvas</div>
                       <div className="text-[11px] text-text-faint">
-                        Infinite 2D whiteboard for ideas.
+                        Infinite 2D whiteboard with directional links and card styling.
                       </div>
                     </div>
-                    <span className="text-accent-green font-semibold">Enabled</span>
+                    <span className="text-accent-green font-semibold text-[11px]">Active</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-bg-secondary rounded-lg border border-border-subtle">
+                    <div>
+                      <div className="font-medium text-text-primary">LaTeX Math Equations</div>
+                      <div className="text-[11px] text-text-faint">
+                        Fast client-side KaTeX rendering for scientific and math notes.
+                      </div>
+                    </div>
+                    <span className="text-accent-green font-semibold text-[11px]">Active</span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 5. General Tab */}
-            {activeTab === "general" && (
+            {/* 5. Hotkeys Tab */}
+            {activeTab === "hotkeys" && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-text-primary">
-                  {t?.general || "General"}
+                  {t?.shortcutsTitle || "Keyboard Shortcuts"}
                 </h3>
-                <div className="p-3 bg-bg-secondary rounded-lg border border-border-subtle space-y-1">
-                  <div className="font-medium text-text-primary">Auto Save</div>
-                  <div className="text-[11px] text-text-faint">
-                    {t?.autoSaveDesc ||
-                      "Notes are automatically saved on edit and debounced safely to local disk."}
+                <div className="space-y-1.5 divide-y divide-border-subtle/50 text-[11px]">
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Quick Switcher / Search</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      Ctrl + O
+                    </span>
+                  </div>
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Command Palette</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      Ctrl + P
+                    </span>
+                  </div>
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Toggle Text Direction (Auto / RTL / LTR)</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      Ctrl + Shift + X
+                    </span>
+                  </div>
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Distraction-Free Zen Mode</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      F11
+                    </span>
+                  </div>
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Save Note</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      Ctrl + S
+                    </span>
+                  </div>
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Open Global Graph</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      Ctrl + G
+                    </span>
+                  </div>
+                  <div className="pt-1.5 flex items-center justify-between">
+                    <span className="text-text-primary">Open Settings</span>
+                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
+                      Ctrl + ,
+                    </span>
                   </div>
                 </div>
               </div>
@@ -372,25 +485,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div>
                     <h3 className="text-sm font-semibold text-text-primary">About Shard</h3>
                     <div className="text-[11px] text-accent-purple font-medium">
-                      {t?.aboutVersion || "v0.1.0 (Native Release)"}
+                      v0.1.0 (Zero-Bloat Release)
                     </div>
                   </div>
                 </div>
                 <p className="text-text-muted leading-relaxed">
-                  {t?.aboutDesc ||
-                    "Shard is a high-performance, zero-bloat local knowledge base and markdown editor designed to run flawlessly on potato PCs without Electron overhead."}
+                  Shard is an ultra-fast, local-first personal knowledge base and visual canvas designed to run effortlessly on low-spec PCs, laptops, and mobile devices without Electron overhead.
                 </p>
                 <div className="p-3 bg-bg-secondary rounded-lg border border-border-subtle text-text-faint text-[11px] space-y-1 font-mono">
-                  <div>Engine: Tauri v2 + OS WebView2 (Edge Evergreen)</div>
-                  <div>Editor: CodeMirror 6 (Virtualized line rendering)</div>
-                  <div>Styling: Tailwind CSS</div>
-                  <div>BiDi & RTL: Native Unicode BiDi + CodeMirror perLineTextDirection</div>
-                  <div>Idle Memory: &lt; 35 MB RAM</div>
-                  <div>Startup Time: &lt; 50 ms</div>
-                </div>
-
-                <div className="p-3 bg-bg-secondary/60 rounded-lg border border-border-subtle/80 text-text-faint text-[11px] leading-relaxed">
-                  <span className="font-semibold text-text-muted">Legal Disclaimer:</span> Shard is an independent open-source project developed for local-first knowledge management. It is not affiliated with, associated with, sponsored by, or endorsed by Dynalist Inc. or Obsidian. All product and company names are trademarks™ or registered® trademarks of their respective holders.
+                  <div>Engine: Tauri v2 + Rust Core</div>
+                  <div>Editor: CodeMirror 6 with Live Preview & KaTeX Math</div>
+                  <div>Memory: &lt; 35 MB idle RAM</div>
+                  <div>Startup: &lt; 50 ms</div>
+                  <div>License: GNU GPLv3</div>
                 </div>
               </div>
             )}

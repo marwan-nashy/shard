@@ -112,6 +112,14 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
       action: () => onExecuteCommand?.("toggle-split"),
     },
     {
+      id: "toggle-zen",
+      title: "Toggle Focus / Zen Mode",
+      description: "Distraction-free writing mode with hidden chrome",
+      shortcut: "F11",
+      category: "Editor",
+      action: () => onExecuteCommand?.("toggle-zen"),
+    },
+    {
       id: "toggle-left-sidebar",
       title: "Toggle Left Sidebar",
       description: "Show or hide file tree and search pane",

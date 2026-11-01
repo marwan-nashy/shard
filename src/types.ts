@@ -51,9 +51,10 @@ export interface TabItem {
   isDirty?: boolean;
 }
 
-export type ViewMode = 'live' | 'source';
-export type SidebarTab = 'files' | 'search' | 'tags' | 'outline';
-export type RightSidebarTab = 'backlinks' | 'outline';
+export type ViewMode = "live" | "source";
+export type SidebarTab = "files" | "search" | "tags" | "outline" | "calendar";
+export type RightSidebarTab = "backlinks" | "outline" | "localgraph";
+export type ThemePreset = "shard" | "oled" | "catppuccin" | "nord" | "paper";
 
 export interface OutlineItem {
   level: number;
@@ -86,6 +87,7 @@ export interface CanvasEdgeData {
   id: string;
   fromNode: string;
   toNode: string;
+  label?: string;
 }
 
 export interface CanvasData {

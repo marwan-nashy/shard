@@ -149,6 +149,7 @@ body {
   text-decoration-color: #9283ed;
 }
 
+/* Obsidian-Style Callouts */
 .cm-callout {
   border-inline-start: 4px solid #7b6cd9;
   background-color: rgba(123, 108, 217, 0.08);
@@ -157,9 +158,9 @@ body {
   border-radius: 4px;
 }
 
-.cm-callout-warning {
-  border-inline-start-color: #e6963c;
-  background-color: rgba(230, 150, 60, 0.08);
+.cm-callout-note, .cm-callout-info {
+  border-inline-start-color: #4a90e2;
+  background-color: rgba(74, 144, 226, 0.08);
 }
 
 .cm-callout-tip {
@@ -167,22 +168,88 @@ body {
   background-color: rgba(86, 176, 117, 0.08);
 }
 
-.cm-callout-title {
-  font-weight: 600;
-  font-size: 0.95em;
-  margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.cm-callout-warning {
+  border-inline-start-color: #e6963c;
+  background-color: rgba(230, 150, 60, 0.08);
 }
 
+.cm-callout-important, .cm-callout-caution {
+  border-inline-start-color: #e05353;
+  background-color: rgba(224, 83, 83, 0.08);
+}
+
+.cm-callout-example {
+  border-inline-start-color: #7b6cd9;
+  background-color: rgba(123, 108, 217, 0.08);
+}
+
+.cm-callout-badge {
+  font-family: inherit;
+}
+
+.cm-callout-badge-note, .cm-callout-badge-info {
+  color: #4a90e2;
+  background-color: rgba(74, 144, 226, 0.15);
+}
+
+.cm-callout-badge-tip {
+  color: #56b075;
+  background-color: rgba(86, 176, 117, 0.15);
+}
+
+.cm-callout-badge-warning {
+  color: #e6963c;
+  background-color: rgba(230, 150, 60, 0.15);
+}
+
+.cm-callout-badge-important, .cm-callout-badge-caution {
+  color: #e05353;
+  background-color: rgba(224, 83, 83, 0.15);
+}
+
+.cm-callout-badge-example {
+  color: #7b6cd9;
+  background-color: rgba(123, 108, 217, 0.15);
+}
+
+.cm-blockquote-line {
+  border-inline-start: 3px solid #555555;
+  color: #a0a0a0;
+  padding-inline-start: 12px !important;
+  font-style: italic;
+}
+
+/* Strikethrough & Highlight */
+.cm-strikethrough {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.cm-highlight {
+  background-color: rgba(234, 179, 8, 0.25);
+  color: #fef08a;
+  border-radius: 2px;
+  padding: 0 3px;
+}
+
+/* LaTeX Math */
 .cm-math-inline {
-  background: rgba(123, 108, 217, 0.12);
+  background: rgba(123, 108, 217, 0.15);
   color: #b3a5ff;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.9em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: KaTeX_Main, Times New Roman, serif;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cm-math-block {
+  background: rgba(123, 108, 217, 0.08);
+  border: 1px solid rgba(123, 108, 217, 0.2);
+  padding: 12px;
+  margin: 8px 0;
+  border-radius: 6px;
+  font-family: KaTeX_Main, Times New Roman, serif;
 }
 
 /* CodeMirror Search Panel Dark Styling */
@@ -294,6 +361,74 @@ body {
 /* RTL layout adjustments */
 [dir="rtl"] {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Cairo", Tahoma, "Noto Sans Arabic", sans-serif;
+}
+
+/* ==========================================================================
+   THEME PRESETS
+   ========================================================================== */
+
+/* 1. OLED Pure Black */
+html.theme-oled {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-card: #121212;
+  --color-bg-hover: #1c1c1c;
+  --color-bg-active: #242424;
+  --color-bg-code: #000000;
+  --color-border-subtle: #1f1f1f;
+  --color-border-light: #2c2c2c;
+}
+
+/* 2. Catppuccin Mocha */
+html.theme-catppuccin {
+  --color-bg-primary: #1e1e2e;
+  --color-bg-secondary: #181825;
+  --color-bg-card: #313244;
+  --color-bg-hover: #45475a;
+  --color-bg-active: #585b70;
+  --color-bg-code: #11111b;
+  --color-border-subtle: #313244;
+  --color-border-light: #45475a;
+  --color-accent-purple: #cba6f7;
+  --color-accent-purple-hover: #b4befe;
+  --color-text-primary: #cdd6f4;
+  --color-text-muted: #a6adc8;
+  --color-text-faint: #6c7086;
+}
+
+/* 3. Nord */
+html.theme-nord {
+  --color-bg-primary: #2e3440;
+  --color-bg-secondary: #242933;
+  --color-bg-card: #3b4252;
+  --color-bg-hover: #434c5e;
+  --color-bg-active: #4c566a;
+  --color-bg-code: #20242c;
+  --color-border-subtle: #3b4252;
+  --color-border-light: #4c566a;
+  --color-accent-purple: #88c0d0;
+  --color-accent-purple-hover: #81a1c1;
+  --color-text-primary: #eceff4;
+  --color-text-muted: #d8dee9;
+  --color-text-faint: #4c566a;
+}
+
+/* 4. Warm Paper / Sepia Light */
+html.theme-paper {
+  color-scheme: light;
+  --color-bg-primary: #fbfbf9;
+  --color-bg-secondary: #f0eee6;
+  --color-bg-card: #ffffff;
+  --color-bg-hover: #e8e5db;
+  --color-bg-active: #dfdacf;
+  --color-bg-code: #f3efe6;
+  --color-border-subtle: #e2ddd0;
+  --color-border-light: #d0c9b9;
+  --color-accent-purple: #6c52b5;
+  --color-accent-purple-hover: #563e9c;
+  --color-text-primary: #202020;
+  --color-text-muted: #5e5e5e;
+  --color-text-faint: #888888;
 }
 
 

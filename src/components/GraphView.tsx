@@ -8,6 +8,33 @@ interface GraphViewProps {
   onRefresh: () => void;
 }
 
+const TAG_COLORS: Record<string, string> = {
+  ideas: "#a855f7",
+  work: "#3b82f6",
+  project: "#10b981",
+  journal: "#f59e0b",
+  research: "#ec4899",
+  arabic: "#06b6d4",
+  عربي: "#06b6d4",
+  ملاحظات: "#8b5cf6",
+};
+
+function getNodeColor(node: GraphNode): string {
+  if (node.tags && node.tags.length > 0) {
+    for (const t of node.tags) {
+      const lower = t.toLowerCase();
+      if (TAG_COLORS[lower]) return TAG_COLORS[lower];
+    }
+    let hash = 0;
+    for (let i = 0; i < node.tags[0].length; i++) {
+      hash = node.tags[0].charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 75%, 65%)`;
+  }
+  return "#7b6cd9";
+}
+
 export const GraphView: React.FC<GraphViewProps> = ({
   data,
   onSelectNode,
@@ -239,22 +266,35 @@ export const GraphView: React.FC<GraphViewProps> = ({
       const isHovered = hoveredNode.current?.id === node.id;
       const baseRadius = 4 + Math.min(node.link_count * 1.5, 12);
       const radius = isHovered ? baseRadius + 3 : baseRadius;
+      const isGhost = !node.path;
+      const nodeColor = getNodeColor(node);
 
-      // Circle
-      ctx.fillStyle = isHovered ? "#9283ed" : "#7b6cd9";
+      // Circle fill
+      ctx.fillStyle = isHovered
+        ? "#ffffff"
+        : isGhost
+        ? "rgba(123, 108, 217, 0.25)"
+        : nodeColor;
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Border
-      ctx.strokeStyle = isHovered ? "#ffffff" : "#262626";
-      ctx.lineWidth = 1.5;
+      // Border with dash for ghost/uncreated notes
+      if (isGhost) {
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = "#888888";
+      } else {
+        ctx.setLineDash([]);
+        ctx.strokeStyle = isHovered ? "#ffffff" : "rgba(0, 0, 0, 0.4)";
+      }
+      ctx.lineWidth = isHovered ? 2 : 1.5;
       ctx.stroke();
+      ctx.setLineDash([]);
 
       // Label
       if (transform.scale > 0.7 || isHovered || node.link_count > 3) {
-        ctx.fillStyle = isHovered ? "#ffffff" : "#999999";
-        ctx.font = `${isHovered ? "bold " : ""}11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, "Noto Sans Arabic", sans-serif`;
+        ctx.fillStyle = isHovered ? "#ffffff" : isGhost ? "#777777" : "#999999";
+        ctx.font = `${isHovered ? "bold " : ""}${isGhost ? "italic " : ""}11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, "Noto Sans Arabic", sans-serif`;
         ctx.textAlign = "center";
         ctx.fillText(node.label, node.x, node.y + radius + 12);
       }

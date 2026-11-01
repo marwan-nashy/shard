@@ -34,8 +34,11 @@ import {
   Settings,
   PanelRight,
   X,
+  Minimize2,
 } from "lucide-react";
 import { Language, TextDirection, translations } from "./i18n";
+import { ThemePreset } from "./types";
+import { LocalGraph } from "./components/LocalGraph";
 
 export default function App() {
   // Language & Direction state
@@ -69,6 +72,26 @@ export default function App() {
       textDirection === "auto" ? "rtl" : textDirection === "rtl" ? "ltr" : "auto";
     handleTextDirectionChange(nextDir);
   };
+
+  // Theme preset state
+  const [theme, setTheme] = useState<ThemePreset>(() => {
+    return (localStorage.getItem("shard_theme") as ThemePreset) || "shard";
+  });
+
+  const handleThemeChange = (newTheme: ThemePreset) => {
+    setTheme(newTheme);
+    localStorage.setItem("shard_theme", newTheme);
+    document.documentElement.className = newTheme !== "shard" ? `theme-${newTheme}` : "";
+    setStatusMessage(`Theme applied: ${newTheme.toUpperCase()}`);
+  };
+
+  useEffect(() => {
+    document.documentElement.className = theme !== "shard" ? `theme-${theme}` : "";
+  }, [theme]);
+
+  // Distraction-Free Focus / Zen Mode
+  const [isZenMode, setIsZenMode] = useState(false);
+  const toggleZenMode = () => setIsZenMode((prev) => !prev);
 
   // Vault state
   const [vaultPath, setVaultPath] = useState<string | null>(null);
@@ -190,6 +213,14 @@ export default function App() {
     });
     return items;
   }, [activeContent]);
+
+  // Active note title helper
+  const activeTitle = useMemo(() => {
+    return (
+      activePath?.split(/[\\/]/).pop()?.replace(/\.(md|canvas)$/, "") ||
+      "Untitled"
+    );
+  }, [activePath]);
 
   // Refresh recent vaults list from Rust backend
   const refreshRecentVaults = async () => {
@@ -596,14 +627,14 @@ export default function App() {
   };
 
   // Daily note
-  const handleDailyNote = async () => {
+  const handleDailyNote = async (dateStr?: string) => {
     if (!vaultPath) {
       setVaultSelectorOpen(true);
       return;
     }
-    const today = new Date().toISOString().split("T")[0];
-    const dailyTitle = `${today}.md`;
-    const existing = allNotes.find((n) => n.title === today);
+    const targetDate = dateStr || new Date().toISOString().split("T")[0];
+    const dailyTitle = `${targetDate}.md`;
+    const existing = allNotes.find((n) => n.title === targetDate);
 
     if (existing) {
       openNote(existing.path);
@@ -614,13 +645,14 @@ export default function App() {
           parentFolder: null,
           name: dailyTitle,
         });
-        const initialContent = `# Daily Note: ${today}\n\n## Tasks\n- [ ] Plan today's priorities\n\n## Notes\n\n`;
+        const initialContent = `# Daily Note: ${targetDate}\n\n## Tasks\n- [ ] Priorities for ${targetDate}\n\n## Notes & Reflections\n\n`;
         await invoke("write_file_content", {
           filePath: newPath,
           content: initialContent,
         });
         await loadVault(vaultPath);
         openNote(newPath);
+        setStatusMessage(`Opened daily note: ${targetDate}`);
       } catch (err) {
         console.error(err);
       }
@@ -705,12 +737,15 @@ export default function App() {
       case "switch-language":
         handleLanguageChange(language === "en" ? "ar" : "en");
         break;
+      case "toggle-zen":
+        toggleZenMode();
+        break;
       default:
         break;
     }
   };
 
-  // Keyboard shortcuts (Ctrl+O, Ctrl+P, Ctrl+S, Ctrl+G, Ctrl+E, Ctrl+N, Ctrl+\, Ctrl+B, Ctrl+,)
+  // Keyboard shortcuts (Ctrl+O, Ctrl+P, Ctrl+S, Ctrl+G, Ctrl+E, Ctrl+N, Ctrl+\, Ctrl+B, Ctrl+,, F11)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "o") {
@@ -748,12 +783,18 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === ",") {
         e.preventDefault();
         setSettingsOpen(true);
+      } else if (e.key === "F11") {
+        e.preventDefault();
+        toggleZenMode();
+      } else if (e.key === "Escape" && isZenMode) {
+        e.preventDefault();
+        setIsZenMode(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePath, activeContent, vaultPath]);
+  }, [activePath, activeContent, vaultPath, isZenMode]);
 
   // Initial startup: check last vault from Rust config (%APPDATA%/Shard/config.json)
   useEffect(() => {
@@ -790,7 +831,7 @@ export default function App() {
       {/* Main Workspace Row */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* 1. Left Activity Ribbon (Desktop only: 42px) */}
-        {!isMobile && (
+        {!isMobile && !isZenMode && (
           <Ribbon
             activeView={activeView}
             onToggleView={setActiveView}
@@ -810,7 +851,8 @@ export default function App() {
         )}
 
         {/* 2. Left Multi-Tab Sidebar (Files, Search, Tags, Outline) */}
-        {leftSidebarOpen &&
+        {!isZenMode &&
+          leftSidebarOpen &&
           (isMobile ? (
             <div className="fixed inset-0 z-50 flex">
               <div
@@ -842,6 +884,7 @@ export default function App() {
                   onNavigateToNote={openNote}
                   activeContent={activeContent}
                   onJumpToHeading={(heading) => setTargetHeading(heading)}
+                  onCreateDailyNote={handleDailyNote}
                   t={t.sidebar}
                 />
               </div>
@@ -872,6 +915,7 @@ export default function App() {
                 onNavigateToNote={openNote}
                 activeContent={activeContent}
                 onJumpToHeading={(heading) => setTargetHeading(heading)}
+                onCreateDailyNote={handleDailyNote}
                 t={t.sidebar}
               />
             </div>
@@ -880,7 +924,7 @@ export default function App() {
         {/* 3. Central Document Workspace */}
         <div className="flex-1 flex flex-col min-w-0 bg-bg-primary overflow-hidden">
           {/* Mobile Top Header */}
-          {isMobile && (
+          {isMobile && !isZenMode && (
             <div className="h-11 bg-bg-secondary border-b border-border-subtle flex items-center justify-between px-3 select-none shrink-0">
               <button
                 onClick={() => setLeftSidebarOpen(true)}
@@ -923,30 +967,32 @@ export default function App() {
             </div>
           )}
           {/* Document Tab Bar */}
-          <TabBar
-            tabs={tabs}
-            activePath={activePath}
-            onSelectTab={openNote}
-            onCloseTab={(path) => {
-              const remaining = tabs.filter((t) => t.path !== path);
-              setTabs(remaining);
-              if (activePath === path) {
-                if (remaining.length > 0) openNote(remaining[0].path);
-                else {
-                  setActivePath(null);
-                  setActiveContent("");
+          {!isZenMode && (
+            <TabBar
+              tabs={tabs}
+              activePath={activePath}
+              onSelectTab={openNote}
+              onCloseTab={(path) => {
+                const remaining = tabs.filter((t) => t.path !== path);
+                setTabs(remaining);
+                if (activePath === path) {
+                  if (remaining.length > 0) openNote(remaining[0].path);
+                  else {
+                    setActivePath(null);
+                    setActiveContent("");
+                  }
                 }
+              }}
+              onNewTab={() => handleCreateNote()}
+              viewMode={viewMode}
+              onToggleViewMode={() =>
+                setViewMode((m) => (m === "live" ? "source" : "live"))
               }
-            }}
-            onNewTab={() => handleCreateNote()}
-            viewMode={viewMode}
-            onToggleViewMode={() =>
-              setViewMode((m) => (m === "live" ? "source" : "live"))
-            }
-            onToggleSplit={() => setIsSplit(!isSplit)}
-            onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
-            rightSidebarOpen={rightSidebarOpen}
-          />
+              onToggleSplit={() => setIsSplit(!isSplit)}
+              onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
+              rightSidebarOpen={rightSidebarOpen}
+            />
+          )}
 
           {/* Active View Container */}
           <div className="flex-1 overflow-hidden relative flex">
@@ -978,6 +1024,8 @@ export default function App() {
                       targetHeading={targetHeading}
                       textDirection={textDirection}
                       onToggleTextDirection={cycleTextDirection}
+                      onToggleZenMode={toggleZenMode}
+                      isZenMode={isZenMode}
                     />
                   </div>
 
@@ -1036,8 +1084,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* 4. Right Sidebar (Backlinks & Outline) */}
-        {rightSidebarOpen &&
+        {/* 4. Right Sidebar (Backlinks, Outline, Local Graph) */}
+        {!isZenMode &&
+          rightSidebarOpen &&
           (isMobile ? (
             <div className="fixed inset-0 z-50 flex justify-end">
               <div
@@ -1070,6 +1119,17 @@ export default function App() {
                       <ListTree className="w-3.5 h-3.5" />
                       <span>Outline</span>
                     </button>
+                    <button
+                      onClick={() => setRightSidebarTab("localgraph")}
+                      className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                        rightSidebarTab === "localgraph"
+                          ? "bg-bg-card text-accent-purple font-medium"
+                          : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                      }`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Local Graph</span>
+                    </button>
                   </div>
                   <button
                     onClick={() => setRightSidebarOpen(false)}
@@ -1083,19 +1143,17 @@ export default function App() {
                 <div className="flex-1 overflow-hidden">
                   {rightSidebarTab === "backlinks" ? (
                     <BacklinksPane
-                      currentTitle={
-                        activePath
-                          ?.split(/[\\/]/)
-                          .pop()
-                          ?.replace(/\.(md|canvas)$/, "") || "Untitled"
-                      }
+                      currentTitle={activeTitle}
                       data={backlinks}
                       onNavigate={(title) => {
                         const target = allNotes.find((n) => n.title === title);
-                        if (target) openNote(target.path);
+                        if (target) {
+                          openNote(target.path);
+                          setRightSidebarOpen(false);
+                        }
                       }}
                     />
-                  ) : (
+                  ) : rightSidebarTab === "outline" ? (
                     <div className="flex flex-col h-full p-2 space-y-1 overflow-y-auto">
                       {outlineHeadings.length === 0 ? (
                         <div className="text-center text-text-faint text-[11px] py-8">
@@ -1120,6 +1178,22 @@ export default function App() {
                         ))
                       )}
                     </div>
+                  ) : (
+                    <LocalGraph
+                      currentTitle={activeTitle}
+                      graphData={graphData}
+                      onSelectNode={(title) => {
+                        const target = allNotes.find((n) => n.title === title);
+                        if (target) {
+                          openNote(target.path);
+                          setRightSidebarOpen(false);
+                        }
+                      }}
+                      onOpenFullGraph={() => {
+                        setActiveView("graph");
+                        setRightSidebarOpen(false);
+                      }}
+                    />
                   )}
                 </div>
               </div>
@@ -1150,25 +1224,31 @@ export default function App() {
                   <ListTree className="w-3.5 h-3.5" />
                   <span>Outline</span>
                 </button>
+                <button
+                  onClick={() => setRightSidebarTab("localgraph")}
+                  className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                    rightSidebarTab === "localgraph"
+                      ? "bg-bg-card text-accent-purple font-medium"
+                      : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                  }`}
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Local Graph</span>
+                </button>
               </div>
 
               {/* Right Sidebar Content */}
               <div className="flex-1 overflow-hidden">
                 {rightSidebarTab === "backlinks" ? (
                   <BacklinksPane
-                    currentTitle={
-                      activePath
-                        ?.split(/[\\/]/)
-                        .pop()
-                        ?.replace(/\.(md|canvas)$/, "") || "Untitled"
-                    }
+                    currentTitle={activeTitle}
                     data={backlinks}
                     onNavigate={(title) => {
                       const target = allNotes.find((n) => n.title === title);
                       if (target) openNote(target.path);
                     }}
                   />
-                ) : (
+                ) : rightSidebarTab === "outline" ? (
                   <div className="flex flex-col h-full p-2 space-y-1 overflow-y-auto">
                     {outlineHeadings.length === 0 ? (
                       <div className="text-center text-text-faint text-[11px] py-8">
@@ -1190,6 +1270,16 @@ export default function App() {
                       ))
                     )}
                   </div>
+                ) : (
+                  <LocalGraph
+                    currentTitle={activeTitle}
+                    graphData={graphData}
+                    onSelectNode={(title) => {
+                      const target = allNotes.find((n) => n.title === title);
+                      if (target) openNote(target.path);
+                    }}
+                    onOpenFullGraph={() => setActiveView("graph")}
+                  />
                 )}
               </div>
             </div>
@@ -1197,7 +1287,7 @@ export default function App() {
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      {isMobile && (
+      {isMobile && !isZenMode && (
         <div className="h-14 bg-bg-secondary border-t border-border-subtle flex items-center justify-around px-2 z-40 select-none shrink-0">
           <button
             onClick={() => setLeftSidebarOpen(true)}
@@ -1274,7 +1364,7 @@ export default function App() {
       )}
 
       {/* Desktop Status Bar */}
-      {!isMobile && (
+      {!isMobile && !isZenMode && (
         <StatusBar
           status={statusMessage}
           activePath={activePath}
@@ -1305,6 +1395,9 @@ export default function App() {
         onLanguageChange={handleLanguageChange}
         textDirection={textDirection}
         onTextDirectionChange={handleTextDirectionChange}
+        currentTheme={theme}
+        onThemeChange={handleThemeChange}
+        vaultPath={vaultPath}
         t={t.settings}
       />
 
@@ -1376,6 +1469,18 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Floating Exit Focus Button */}
+      {isZenMode && (
+        <button
+          onClick={() => setIsZenMode(false)}
+          className="fixed top-4 right-6 z-50 px-3 py-1.5 rounded-full bg-bg-card/90 border border-border-subtle backdrop-blur-md text-xs text-text-muted hover:text-text-primary shadow-xl flex items-center gap-1.5 transition-all hover:scale-105"
+          title="Exit Focus Mode (Esc or F11)"
+        >
+          <Minimize2 className="w-3.5 h-3.5 text-accent-purple" />
+          <span>Exit Focus (Esc)</span>
+        </button>
       )}
     </div>
   );

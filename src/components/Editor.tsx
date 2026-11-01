@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { EditorState } from "@codemirror/state";
 import {
   EditorView,
@@ -14,7 +14,9 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
+import katex from "katex";
 import { ViewMode } from "../types";
+import { FormattingToolbar } from "./FormattingToolbar";
 
 export interface EditorProps {
   content: string;
@@ -26,6 +28,8 @@ export interface EditorProps {
   targetHeading?: string | null;
   textDirection?: "auto" | "rtl" | "ltr";
   onToggleTextDirection?: () => void;
+  onToggleZenMode?: () => void;
+  isZenMode?: boolean;
 }
 
 // Widget for interactive checkbox toggling
@@ -51,6 +55,64 @@ class CheckboxWidget extends WidgetType {
     });
     wrap.appendChild(box);
     return wrap;
+  }
+}
+
+// Widget for LaTeX Math rendering (KaTeX)
+class MathWidget extends WidgetType {
+  constructor(readonly math: string, readonly isBlock: boolean) {
+    super();
+  }
+
+  toDOM(): HTMLElement {
+    const el = document.createElement(this.isBlock ? "div" : "span");
+    el.className = this.isBlock
+      ? "cm-math-block my-2 p-2 rounded bg-bg-card/40 border border-border-subtle text-center overflow-x-auto select-none"
+      : "cm-math-inline px-1 py-0.5 rounded bg-bg-card/40 text-accent-purple select-none inline-block";
+    el.dir = "ltr";
+    try {
+      el.innerHTML = katex.renderToString(this.math, {
+        displayMode: this.isBlock,
+        throwOnError: false,
+      });
+    } catch {
+      el.textContent = this.math;
+    }
+    return el;
+  }
+}
+
+// Widget for Callout badges (Obsidian style)
+class CalloutBadgeWidget extends WidgetType {
+  constructor(readonly type: string, readonly titleText: string) {
+    super();
+  }
+
+  toDOM(): HTMLElement {
+    const bar = document.createElement("div");
+    const t = this.type.toLowerCase();
+    bar.className = `cm-callout-badge cm-callout-badge-${t} flex items-center gap-1.5 font-semibold text-xs py-1 px-2 rounded mb-1 select-none`;
+
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "text-sm";
+    const iconsMap: Record<string, string> = {
+      note: "ℹ️",
+      info: "ℹ️",
+      tip: "💡",
+      warning: "⚠️",
+      caution: "🔥",
+      important: "❗",
+      example: "📌",
+    };
+    iconSpan.textContent = iconsMap[t] || "📝";
+    bar.appendChild(iconSpan);
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "capitalize tracking-wide font-medium";
+    titleSpan.textContent = this.titleText || this.type;
+    bar.appendChild(titleSpan);
+
+    return bar;
   }
 }
 
@@ -92,7 +154,7 @@ class CodeBlockHeaderWidget extends WidgetType {
   }
 }
 
-// Wrap selected text with prefix and suffix (e.g. bold, italic, wikilink)
+// Wrap selected text with prefix and suffix
 function wrapSelection(view: EditorView, prefix: string, suffix: string): boolean {
   const { from, to } = view.state.selection.main;
   const selected = view.state.sliceDoc(from, to);
@@ -102,14 +164,12 @@ function wrapSelection(view: EditorView, prefix: string, suffix: string): boolea
     selected.endsWith(suffix) &&
     selected.length >= prefix.length + suffix.length
   ) {
-    // Unwrap
     const unwrapped = selected.slice(prefix.length, selected.length - suffix.length);
     view.dispatch({
       changes: { from, to, insert: unwrapped },
       selection: { anchor: from, head: from + unwrapped.length },
     });
   } else {
-    // Wrap
     const wrapped = `${prefix}${selected}${suffix}`;
     view.dispatch({
       changes: { from, to, insert: wrapped },
@@ -166,7 +226,6 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
             const codeBlockMatch = text.match(/^```(\w*)/);
             if (codeBlockMatch) {
               if (!inCodeBlock) {
-                // Opening fence
                 inCodeBlock = true;
                 codeBlockLang = codeBlockMatch[1] || "";
                 widgets.push(
@@ -181,7 +240,6 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
                   Decoration.line({ class: "cm-codeblock-line" }).range(lineStart)
                 );
               } else {
-                // Closing fence
                 inCodeBlock = false;
                 widgets.push(
                   Decoration.line({ class: "cm-codeblock-line rounded-b mb-2" }).range(
@@ -229,20 +287,25 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
               );
             }
 
-            // 3. Callout blocks (> [!NOTE], > [!WARNING], > [!TIP], > [!INFO], > [!CAUTION])
-            const calloutMatch = text.match(/^>\s*\[!(NOTE|WARNING|TIP|INFO|CAUTION)\]\s*(.*)/i);
+            // 3. Callout blocks (> [!NOTE], > [!TIP], > [!WARNING], > [!IMPORTANT], > [!CAUTION])
+            const calloutMatch = text.match(/^>\s*\[!(NOTE|WARNING|TIP|INFO|CAUTION|IMPORTANT|EXAMPLE)\]\s*(.*)/i);
             if (calloutMatch) {
               const type = calloutMatch[1].toLowerCase();
+              const titleText = calloutMatch[2].trim();
+              widgets.push(
+                Decoration.widget({
+                  widget: new CalloutBadgeWidget(type, titleText),
+                  side: -1,
+                }).range(lineStart)
+              );
               widgets.push(
                 Decoration.line({
-                  class: `cm-callout ${
-                    type === "warning" || type === "caution"
-                      ? "cm-callout-warning"
-                      : type === "tip"
-                      ? "cm-callout-tip"
-                      : ""
-                  }`,
+                  class: `cm-callout cm-callout-${type}`,
                 }).range(lineStart)
+              );
+            } else if (text.startsWith("> ")) {
+              widgets.push(
+                Decoration.line({ class: "cm-blockquote-line" }).range(lineStart)
               );
             }
 
@@ -314,27 +377,28 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
               );
             }
 
-            // 8. Inline code `code`
-            const codeRegex = /`([^`]+)`/g;
-            let codeMatch;
-            while ((codeMatch = codeRegex.exec(text)) !== null) {
+            // 8. Highlight ==text==
+            const highlightRegex = /==([^=]+)==/g;
+            let hlMatch;
+            while ((hlMatch = highlightRegex.exec(text)) !== null) {
               widgets.push(
-                Decoration.mark({ class: "cm-inline-code" }).range(
-                  lineStart + codeMatch.index,
-                  lineStart + codeMatch.index + codeMatch[0].length
+                Decoration.mark({ class: "cm-highlight" }).range(
+                  lineStart + hlMatch.index,
+                  lineStart + hlMatch.index + hlMatch[0].length
                 )
               );
             }
 
-            // 9. Math equations $math$ and $$block math$$
-            const mathRegex = /\$([^$]+)\$/g;
+            // 9. Inline Math $x$
+            const mathInlineRegex = /(?<!\$)\$([^\$\n]+)\$(?!\$)/g;
             let mathMatch;
-            while ((mathMatch = mathRegex.exec(text)) !== null) {
+            while ((mathMatch = mathInlineRegex.exec(text)) !== null) {
+              const formula = mathMatch[1];
               widgets.push(
-                Decoration.mark({ class: "cm-math-inline" }).range(
-                  lineStart + mathMatch.index,
-                  lineStart + mathMatch.index + mathMatch[0].length
-                )
+                Decoration.widget({
+                  widget: new MathWidget(formula, false),
+                  side: 1,
+                }).range(lineStart + mathMatch.index + mathMatch[0].length)
               );
             }
 
@@ -342,9 +406,9 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
           }
         }
 
-        // Sort decorations strictly by range
-        widgets.sort((a, b) => a.from - b.from);
-        return Decoration.set(widgets);
+        return Decoration.set(
+          widgets.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
+        );
       }
     },
     {
@@ -375,9 +439,58 @@ export const Editor: React.FC<EditorProps> = ({
   targetHeading,
   textDirection = "auto",
   onToggleTextDirection,
+  onToggleZenMode,
+  isZenMode,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+
+  // Live Stats
+  const wordCount = useMemo(() => {
+    const trimmed = content.trim();
+    return trimmed ? trimmed.split(/\s+/).length : 0;
+  }, [content]);
+
+  const charCount = content.length;
+  const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
+
+  // Slash commands completion (/)
+  const slashCommandsCompletion = (context: CompletionContext): CompletionResult | null => {
+    const line = context.state.doc.lineAt(context.pos);
+    const textBefore = line.text.slice(0, context.pos - line.from);
+
+    const slashMatch = textBefore.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
+    if (!slashMatch) return null;
+
+    const start = line.from + textBefore.length - slashMatch[1].length - 1;
+
+    const commands = [
+      { label: "/h1", detail: "Heading 1", apply: "# " },
+      { label: "/h2", detail: "Heading 2", apply: "## " },
+      { label: "/h3", detail: "Heading 3", apply: "### " },
+      { label: "/todo", detail: "Task Checkbox", apply: "- [ ] " },
+      { label: "/bullet", detail: "Bulleted List", apply: "- " },
+      { label: "/number", detail: "Numbered List", apply: "1. " },
+      { label: "/quote", detail: "Blockquote", apply: "> " },
+      { label: "/callout", detail: "Note Callout", apply: "> [!NOTE]\n> Note content here\n" },
+      { label: "/tip", detail: "Tip Callout", apply: "> [!TIP]\n> Useful tip here\n" },
+      { label: "/warning", detail: "Warning Callout", apply: "> [!WARNING]\n> Warning alert here\n" },
+      { label: "/code", detail: "Code Block", apply: "```javascript\n\n```" },
+      { label: "/table", detail: "Markdown Table", apply: "\n| Column 1 | Column 2 |\n| :--- | :--- |\n| Item 1 | Item 2 |\n" },
+      { label: "/math", detail: "LaTeX Math Block", apply: "\n$$\nE = mc^2\n$$\n" },
+      { label: "/divider", detail: "Horizontal Rule", apply: "\n---\n" },
+    ];
+
+    return {
+      from: start,
+      options: commands.map((c) => ({
+        label: c.label,
+        detail: c.detail,
+        apply: c.apply,
+        type: "keyword",
+      })),
+    };
+  };
 
   // Wikilinks Autocompletion on [[
   const wikilinkCompletion = (context: CompletionContext): CompletionResult | null => {
@@ -397,6 +510,108 @@ export const Editor: React.FC<EditorProps> = ({
       from: word.from,
       options,
     };
+  };
+
+  // Formatting Toolbar Action Handler
+  const handleApplyFormat = (type: string, arg?: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    const { state } = view;
+    const { from, to } = state.selection.main;
+    const line = state.doc.lineAt(from);
+
+    switch (type) {
+      case "bold":
+        wrapSelection(view, "**", "**");
+        break;
+      case "italic":
+        wrapSelection(view, "*", "*");
+        break;
+      case "strike":
+        wrapSelection(view, "~~", "~~");
+        break;
+      case "highlight":
+        wrapSelection(view, "==", "==");
+        break;
+      case "code":
+        wrapSelection(view, "`", "`");
+        break;
+      case "link":
+        wrapSelection(view, "[[", "]]");
+        break;
+      case "math":
+        wrapSelection(view, "$", "$");
+        break;
+      case "h1":
+      case "h2":
+      case "h3":
+      case "p": {
+        const prefix = type === "h1" ? "# " : type === "h2" ? "## " : type === "h3" ? "### " : "";
+        const cleanText = line.text.replace(/^#+\s*/, "");
+        view.dispatch({
+          changes: { from: line.from, to: line.to, insert: `${prefix}${cleanText}` },
+        });
+        break;
+      }
+      case "task": {
+        const hasTask = line.text.match(/^(\s*[-*]\s+)\[[ xX]\]/);
+        if (hasTask) {
+          view.dispatch({
+            changes: {
+              from: line.from,
+              to: line.to,
+              insert: line.text.replace(/^(\s*[-*]\s+)\[[ xX]\]\s*/, ""),
+            },
+          });
+        } else {
+          view.dispatch({
+            changes: { from: line.from, to: line.from, insert: "- [ ] " },
+          });
+        }
+        break;
+      }
+      case "bullet":
+        view.dispatch({
+          changes: { from: line.from, to: line.from, insert: "- " },
+        });
+        break;
+      case "number":
+        view.dispatch({
+          changes: { from: line.from, to: line.from, insert: "1. " },
+        });
+        break;
+      case "quote":
+        view.dispatch({
+          changes: { from: line.from, to: line.from, insert: "> " },
+        });
+        break;
+      case "callout": {
+        const calloutType = arg || "NOTE";
+        const template = `> [!${calloutType}]\n> Note content here\n`;
+        view.dispatch({
+          changes: { from, to, insert: template },
+          selection: { anchor: from + template.length },
+        });
+        break;
+      }
+      case "table": {
+        const table = `\n| Column 1 | Column 2 |\n| :--- | :--- |\n| Item 1 | Item 2 |\n`;
+        view.dispatch({
+          changes: { from, to, insert: table },
+          selection: { anchor: from + table.length },
+        });
+        break;
+      }
+      case "divider": {
+        view.dispatch({
+          changes: { from, to, insert: `\n---\n` },
+          selection: { anchor: from + 5 },
+        });
+        break;
+      }
+    }
+    view.focus();
   };
 
   useEffect(() => {
@@ -439,11 +654,31 @@ export const Editor: React.FC<EditorProps> = ({
             return false;
           },
         },
+        {
+          key: "F11",
+          run: () => {
+            if (onToggleZenMode) {
+              onToggleZenMode();
+              return true;
+            }
+            return false;
+          },
+        },
+        {
+          key: "Escape",
+          run: () => {
+            if (isZenMode && onToggleZenMode) {
+              onToggleZenMode();
+              return true;
+            }
+            return false;
+          },
+        },
       ]),
       markdown(),
       highlightActiveLine(),
       EditorView.perLineTextDirection.of(true),
-      autocompletion({ override: [wikilinkCompletion] }),
+      autocompletion({ override: [wikilinkCompletion, slashCommandsCompletion] }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onChange(update.state.doc.toString());
@@ -451,23 +686,23 @@ export const Editor: React.FC<EditorProps> = ({
       }),
       EditorView.theme({
         "&": {
-          backgroundColor: "#1e1e1e",
-          color: "#dcddde",
+          backgroundColor: "var(--color-bg-primary, #1e1e1e)",
+          color: "var(--color-text-primary, #dcddde)",
           height: "100%",
         },
         ".cm-gutters": {
-          backgroundColor: "#1e1e1e",
-          color: "#666666",
+          backgroundColor: "var(--color-bg-primary, #1e1e1e)",
+          color: "var(--color-text-faint, #666666)",
           border: "none",
         },
         ".cm-tooltip": {
-          backgroundColor: "#262626",
-          border: "1px solid #383838",
+          backgroundColor: "var(--color-bg-card, #262626)",
+          border: "1px solid var(--color-border-subtle, #383838)",
           borderRadius: "6px",
-          color: "#dcddde",
+          color: "var(--color-text-primary, #dcddde)",
         },
         ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
-          backgroundColor: "#3b3857",
+          backgroundColor: "var(--color-accent-purple, #7b6cd9)",
           color: "#ffffff",
         },
       }),
@@ -494,7 +729,7 @@ export const Editor: React.FC<EditorProps> = ({
     };
   }, [viewMode]);
 
-  // Sync external content update if doc changed from outside (e.g. switching notes)
+  // Sync external content update
   useEffect(() => {
     if (viewRef.current) {
       const currentDoc = viewRef.current.state.doc.toString();
@@ -506,7 +741,7 @@ export const Editor: React.FC<EditorProps> = ({
     }
   }, [content]);
 
-  // Scroll to target heading if specified
+  // Scroll to target heading
   useEffect(() => {
     if (!targetHeading || !viewRef.current) return;
     const view = viewRef.current;
@@ -538,7 +773,20 @@ export const Editor: React.FC<EditorProps> = ({
 
   return (
     <div className={`w-full h-full overflow-hidden bg-bg-primary flex flex-col ${dirClass}`}>
-      <div ref={containerRef} className="w-full h-full flex-1" />
+      {/* Visual Formatting Toolbar */}
+      <FormattingToolbar
+        onApplyFormat={handleApplyFormat}
+        wordCount={wordCount}
+        charCount={charCount}
+        readingTimeMinutes={readingTimeMinutes}
+        textDirection={textDirection}
+        onToggleTextDirection={onToggleTextDirection}
+        onToggleZenMode={onToggleZenMode}
+        isZenMode={isZenMode}
+      />
+
+      {/* CodeMirror Scroller Container */}
+      <div ref={containerRef} className="w-full h-full flex-1 overflow-hidden" />
     </div>
   );
 };
