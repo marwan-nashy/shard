@@ -28,6 +28,8 @@ import {
   GitFork,
   Printer,
   FileDown,
+  Columns3,
+  Radio,
 } from "lucide-react";
 
 import { FeatureFlags } from "../types";
@@ -47,6 +49,10 @@ interface FormattingToolbarProps {
   onExportPdf?: () => void;
   onExportHtml?: () => void;
   features?: FeatureFlags;
+  onOpenTableEditor?: () => void;
+  onOpenAudioMemo?: () => void;
+  onToggleKanban?: () => void;
+  isKanban?: boolean;
 }
 
 export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
@@ -64,6 +70,10 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
   onExportPdf,
   onExportHtml,
   features,
+  onOpenTableEditor,
+  onOpenAudioMemo,
+  onToggleKanban,
+  isKanban = false,
 }) => {
   const [calloutMenuOpen, setCalloutMenuOpen] = useState(false);
   const [headingMenuOpen, setHeadingMenuOpen] = useState(false);
@@ -279,13 +289,18 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
           )}
         </div>
 
-        <button
-          onClick={() => onApplyFormat("table")}
-          className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          title="Insert Markdown Table"
-        >
-          <Table className="w-3.5 h-3.5" />
-        </button>
+        {features?.tableEditor !== false && (
+          <button
+            onClick={() => {
+              if (onOpenTableEditor) onOpenTableEditor();
+              else onApplyFormat("table");
+            }}
+            className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+            title="Interactive Table Editor"
+          >
+            <Table className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {features?.mathLatex !== false && (
           <button
@@ -336,6 +351,17 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
           </button>
         )}
 
+        {/* Audio Memo Recorder Button */}
+        {features?.audioRecorder !== false && onOpenAudioMemo && (
+          <button
+            onClick={onOpenAudioMemo}
+            className="p-1 rounded text-text-muted hover:text-accent-red hover:bg-bg-hover transition-colors"
+            title="Record Voice Memo (.webm attachment)"
+          >
+            <Radio className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         {/* Smart Templates Button */}
         {features?.templates !== false && onOpenTemplates && (
           <button
@@ -344,6 +370,21 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
             title="Insert Template (Meeting, Journal, Roadmap)"
           >
             <Sparkles className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Kanban Board View Toggle */}
+        {features?.kanbanView !== false && onToggleKanban && (
+          <button
+            onClick={onToggleKanban}
+            className={`p-1 rounded transition-colors ${
+              isKanban
+                ? "bg-accent-purple/20 text-accent-purple font-medium"
+                : "text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+            }`}
+            title={isKanban ? "Switch to Markdown Document" : "Switch to Kanban Board View"}
+          >
+            <Columns3 className="w-3.5 h-3.5" />
           </button>
         )}
 

@@ -17,7 +17,27 @@ import {
   Layers,
   Sparkles,
   FileDown,
+  Cloud,
+  Type as TypeIcon,
+  Code as CodeIcon,
+  RotateCcw,
 } from "lucide-react";
+import { SyncConfig } from "../types";
+import { loadSyncConfig, saveSyncConfig, testWebDavConnection, performWebDavSync } from "../utils/syncManager";
+import {
+  loadCustomShortcuts,
+  saveCustomShortcuts,
+  DEFAULT_SHORTCUTS,
+  CustomShortcutDef,
+  loadUiFont,
+  setUiFont,
+  loadCodeFont,
+  setCodeFont,
+  loadCustomCss,
+  saveCustomCss,
+  isCustomCssEnabled,
+  setCustomCssEnabled,
+} from "../utils/customStyles";
 import { Language, TextDirection, Translations } from "../i18n";
 import { ThemePreset, FeatureFlags } from "../types";
 import { exportVaultAsZip } from "../utils/vaultBackup";
@@ -35,7 +55,7 @@ interface SettingsModalProps {
   onThemeChange?: (theme: ThemePreset) => void;
   vaultPath?: string | null;
   t?: Translations["settings"];
-  initialTab?: "general" | "language" | "appearance" | "features" | "hotkeys" | "about";
+  initialTab?: "general" | "language" | "appearance" | "features" | "hotkeys" | "sync" | "about";
   features?: FeatureFlags;
   onToggleFeature?: (key: keyof FeatureFlags) => void;
   onResetFeatures?: () => void;
@@ -44,6 +64,7 @@ interface SettingsModalProps {
   onCheckUpdate?: () => void;
   autoCheckEnabled?: boolean;
   onToggleAutoCheck?: (enabled: boolean) => void;
+  vaultNotes?: { path: string; content?: string }[];
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -66,13 +87,90 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onCheckUpdate,
   autoCheckEnabled = true,
   onToggleAutoCheck,
+  vaultNotes = [],
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "general" | "language" | "appearance" | "features" | "hotkeys" | "about"
+    "general" | "language" | "appearance" | "features" | "hotkeys" | "sync" | "about"
   >(initialTab);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [featureCategory, setFeatureCategory] = useState<"all" | "views" | "sidebar" | "editor" | "tools">("all");
+
+  // Sync state
+  const [syncConfig, setSyncConfig] = useState<SyncConfig>(loadSyncConfig);
+  const [syncTestMessage, setSyncTestMessage] = useState<string | null>(null);
+  const [syncTestSuccess, setSyncTestSuccess] = useState<boolean | null>(null);
+  const [isTestingSync, setIsTestingSync] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
+  // Appearance typography & CSS state
+  const [uiFont, setUiFontState] = useState(loadUiFont);
+  const [codeFont, setCodeFontState] = useState(loadCodeFont);
+  const [customCss, setCustomCssState] = useState(loadCustomCss);
+  const [customCssEnabled, setCustomCssEnabledState] = useState(isCustomCssEnabled);
+
+  // Hotkeys state
+  const [customShortcuts, setCustomShortcutsState] = useState<CustomShortcutDef[]>(loadCustomShortcuts);
+  const [rebindingId, setRebindingId] = useState<string | null>(null);
+
+  // Hotkey keydown listener for interactive rebinding
+  useEffect(() => {
+    if (!rebindingId) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+
+      const parts: string[] = [];
+      if (e.ctrlKey || e.metaKey) parts.push("Ctrl");
+      if (e.altKey) parts.push("Alt");
+      if (e.shiftKey) parts.push("Shift");
+      parts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+      const newKey = parts.join("+");
+
+      const updated = customShortcuts.map((s) =>
+        s.id === rebindingId ? { ...s, currentKey: newKey } : s
+      );
+      setCustomShortcutsState(updated);
+      saveCustomShortcuts(updated);
+      setRebindingId(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [rebindingId, customShortcuts]);
+
+  const handleUpdateSyncConfig = (patch: Partial<SyncConfig>) => {
+    const next = { ...syncConfig, ...patch };
+    setSyncConfig(next);
+    saveSyncConfig(next);
+  };
+
+  const handleTestWebDav = async () => {
+    setIsTestingSync(true);
+    setSyncTestMessage(null);
+    try {
+      const res = await testWebDavConnection(syncConfig);
+      setSyncTestSuccess(res.success);
+      setSyncTestMessage(res.message);
+    } finally {
+      setIsTestingSync(false);
+    }
+  };
+
+  const handleTriggerSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus("Syncing vault with WebDAV...");
+    try {
+      const res = await performWebDavSync(syncConfig, vaultNotes || []);
+      setSyncStatus(res.message);
+    } catch (err: any) {
+      setSyncStatus(`Sync failed: ${err?.message || "Unknown error"}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -217,6 +315,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Sliders className="w-4 h-4 text-accent-orange" /> {t?.general || "General & Backup"}
+            </button>
+            <button
+              onClick={() => setActiveTab("sync")}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-colors ${
+                activeTab === "sync"
+                  ? "bg-bg-card text-white font-medium border-l-2 border-accent-purple"
+                  : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+              }`}
+            >
+              <Cloud className="w-4 h-4 text-accent-blue" /> <span>Sync & Cloud</span>
             </button>
             <button
               onClick={() => setActiveTab("hotkeys")}
@@ -376,6 +484,90 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     );
                   })}
                 </div>
+
+                {/* Typography Settings */}
+                <div className="pt-3 border-t border-border-subtle space-y-3">
+                  <div className="flex items-center gap-2">
+                    <TypeIcon className="w-4 h-4 text-accent-purple" />
+                    <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+                      Typography & Fonts
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block text-text-muted mb-1 font-medium">UI Font Family</label>
+                      <select
+                        value={uiFont}
+                        onChange={(e) => {
+                          setUiFontState(e.target.value);
+                          setUiFont(e.target.value);
+                        }}
+                        className="w-full bg-bg-card border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                      >
+                        <option value="system">System Default</option>
+                        <option value="inter">Inter (Modern Clean)</option>
+                        <option value="cairo">Cairo (Arabic / RTL Optimized)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-text-muted mb-1 font-medium">Editor Code Font</label>
+                      <select
+                        value={codeFont}
+                        onChange={(e) => {
+                          setCodeFontState(e.target.value);
+                          setCodeFont(e.target.value);
+                        }}
+                        className="w-full bg-bg-card border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple font-mono"
+                      >
+                        <option value="mono">Monospace Default</option>
+                        <option value="jetbrains">JetBrains Mono</option>
+                        <option value="fira">Fira Code</option>
+                        <option value="consolas">Consolas</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Custom CSS Snippets */}
+                <div className="pt-3 border-t border-border-subtle space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CodeIcon className="w-4 h-4 text-accent-emerald" />
+                      <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+                        Custom CSS Snippets
+                      </h3>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-text-muted">
+                      <span>Enable CSS</span>
+                      <input
+                        type="checkbox"
+                        checked={customCssEnabled}
+                        onChange={(e) => {
+                          setCustomCssEnabledState(e.target.checked);
+                          setCustomCssEnabled(e.target.checked);
+                        }}
+                        className="accent-accent-purple"
+                      />
+                    </label>
+                  </div>
+
+                  <p className="text-[10px] text-text-faint">
+                    Inject arbitrary custom styling directly into Shard's editor, preview, and UI panes in real time.
+                  </p>
+
+                  <textarea
+                    rows={4}
+                    value={customCss}
+                    onChange={(e) => {
+                      setCustomCssState(e.target.value);
+                      saveCustomCss(e.target.value);
+                    }}
+                    placeholder={`/* Example custom styling */\n.cm-content { line-height: 1.8; }\n.cm-header-1 { color: #a855f7 !important; }`}
+                    className="w-full bg-bg-card border border-border-subtle rounded-lg p-2.5 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-purple leading-relaxed"
+                  />
+                </div>
               </div>
             )}
 
@@ -518,56 +710,241 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* 5. Hotkeys Tab */}
+            {/* 5. Hotkeys Tab with Interactive Rebinding */}
             {activeTab === "hotkeys" && (
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-text-primary">
-                  {t?.shortcutsTitle || "Keyboard Shortcuts"}
-                </h3>
-                <div className="space-y-1.5 divide-y divide-border-subtle/50 text-[11px]">
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Quick Switcher / Search</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      Ctrl + O
-                    </span>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-text-primary">
+                      {t?.shortcutsTitle || "Keyboard Shortcuts"}
+                    </h3>
+                    <p className="text-[11px] text-text-faint mt-0.5">
+                      Click "Rebind" and press any key combination to customize shortcuts.
+                    </p>
                   </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Command Palette</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      Ctrl + P
-                    </span>
-                  </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Toggle Text Direction (Auto / RTL / LTR)</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      Ctrl + Shift + X
-                    </span>
-                  </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Distraction-Free Zen Mode</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      F11
-                    </span>
-                  </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Save Note</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      Ctrl + S
-                    </span>
-                  </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Open Global Graph</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      Ctrl + G
-                    </span>
-                  </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">Open Settings</span>
-                    <span className="px-2 py-0.5 rounded bg-bg-hover text-accent-purple font-mono">
-                      Ctrl + ,
-                    </span>
+                  <button
+                    onClick={() => {
+                      setCustomShortcutsState(DEFAULT_SHORTCUTS);
+                      saveCustomShortcuts(DEFAULT_SHORTCUTS);
+                    }}
+                    className="px-2.5 py-1 rounded bg-bg-secondary hover:bg-bg-hover border border-border-subtle text-text-muted hover:text-text-primary text-[10px] flex items-center gap-1 transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset Defaults</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {customShortcuts.map((s) => {
+                    const isRebinding = rebindingId === s.id;
+                    return (
+                      <div
+                        key={s.id}
+                        className="p-2.5 rounded-lg bg-bg-card/60 border border-border-subtle flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <div className="font-medium text-text-primary">
+                            {language === "ar" ? s.nameAr : s.name}
+                          </div>
+                          <div className="text-[10px] text-text-faint">
+                            Default: {s.defaultKey}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-1 rounded font-mono text-[11px] border ${
+                              isRebinding
+                                ? "bg-accent-purple text-white animate-pulse border-accent-purple"
+                                : "bg-bg-hover text-accent-purple border-border-subtle"
+                            }`}
+                          >
+                            {isRebinding ? "Press key combo..." : s.currentKey}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => setRebindingId(isRebinding ? null : s.id)}
+                            className="px-2 py-1 rounded bg-bg-secondary hover:bg-bg-hover border border-border-subtle text-[10px] text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                          >
+                            {isRebinding ? "Cancel" : "Rebind"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 6. Sync & Cloud Tab */}
+            {activeTab === "sync" && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                    <Cloud className="w-4 h-4 text-accent-blue" />
+                    <span>Private Cloud & Remote Sync</span>
+                  </h3>
+                  <p className="text-text-faint text-[11px] mt-0.5">
+                    Sync your local notes seamlessly with private WebDAV storage (Nextcloud, OwnCloud, Synology NAS) or Git.
+                  </p>
+                </div>
+
+                {/* Provider Selection */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-text-muted">Sync Provider</label>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {[
+                      { id: "none", name: "Offline Only", desc: "No remote sync" },
+                      { id: "webdav", name: "WebDAV", desc: "Nextcloud, NAS, InfiniCLOUD" },
+                      { id: "git", name: "Git Repo", desc: "GitHub / GitLab" },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleUpdateSyncConfig({ provider: p.id as any })}
+                        className={`p-2.5 rounded-lg border text-left transition-all ${
+                          syncConfig.provider === p.id
+                            ? "border-accent-purple bg-bg-card font-medium text-text-primary shadow-sm"
+                            : "border-border-subtle bg-bg-secondary/40 text-text-muted hover:bg-bg-card hover:text-text-primary"
+                        }`}
+                      >
+                        <div className="font-semibold text-xs">{p.name}</div>
+                        <div className="text-[10px] text-text-faint mt-0.5">{p.desc}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
+
+                {/* WebDAV Settings */}
+                {syncConfig.provider === "webdav" && (
+                  <div className="space-y-3 p-3.5 rounded-xl bg-bg-card/50 border border-border-subtle text-xs">
+                    <div>
+                      <label className="block text-text-muted mb-1 font-medium">WebDAV URL</label>
+                      <input
+                        type="url"
+                        value={syncConfig.webdavUrl || ""}
+                        onChange={(e) => handleUpdateSyncConfig({ webdavUrl: e.target.value })}
+                        placeholder="https://cloud.example.com/remote.php/dav/files/user/shard/"
+                        className="w-full bg-bg-primary border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-text-muted mb-1 font-medium">Username</label>
+                        <input
+                          type="text"
+                          value={syncConfig.webdavUsername || ""}
+                          onChange={(e) => handleUpdateSyncConfig({ webdavUsername: e.target.value })}
+                          placeholder="username"
+                          className="w-full bg-bg-primary border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-text-muted mb-1 font-medium">Password / App Token</label>
+                        <input
+                          type="password"
+                          value={syncConfig.webdavPassword || ""}
+                          onChange={(e) => handleUpdateSyncConfig({ webdavPassword: e.target.value })}
+                          placeholder="••••••••••••"
+                          className="w-full bg-bg-primary border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleTestWebDav}
+                          disabled={isTestingSync || !syncConfig.webdavUrl}
+                          className="px-3 py-1.5 rounded-md bg-bg-secondary hover:bg-bg-hover border border-border-subtle text-text-primary font-medium text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {isTestingSync ? "Testing..." : "Test Connection"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleTriggerSync}
+                          disabled={isSyncing || !syncConfig.webdavUrl}
+                          className="px-3 py-1.5 rounded-md bg-accent-purple hover:bg-accent-purple-hover text-white font-medium text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSyncing ? "Syncing..." : "Sync Now"}
+                        </button>
+                      </div>
+
+                      <label className="flex items-center gap-1.5 text-[11px] text-text-muted cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={syncConfig.autoSync}
+                          onChange={(e) => handleUpdateSyncConfig({ autoSync: e.target.checked })}
+                          className="accent-accent-purple"
+                        />
+                        <span>Auto-sync in background</span>
+                      </label>
+                    </div>
+
+                    {syncTestMessage && (
+                      <div
+                        className={`p-2 rounded text-[11px] ${
+                          syncTestSuccess
+                            ? "bg-accent-green/15 text-accent-green border border-accent-green/30"
+                            : "bg-accent-orange/15 text-accent-orange border border-accent-orange/30"
+                        }`}
+                      >
+                        {syncTestMessage}
+                      </div>
+                    )}
+
+                    {syncStatus && (
+                      <div className="p-2 rounded bg-bg-secondary text-[11px] text-text-muted font-mono">
+                        {syncStatus}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Git Settings */}
+                {syncConfig.provider === "git" && (
+                  <div className="space-y-3 p-3.5 rounded-xl bg-bg-card/50 border border-border-subtle text-xs">
+                    <div>
+                      <label className="block text-text-muted mb-1 font-medium">Git Repository URL</label>
+                      <input
+                        type="url"
+                        value={syncConfig.gitRemoteUrl || ""}
+                        onChange={(e) => handleUpdateSyncConfig({ gitRemoteUrl: e.target.value })}
+                        placeholder="https://github.com/username/vault.git"
+                        className="w-full bg-bg-primary border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-text-muted mb-1 font-medium">Branch</label>
+                        <input
+                          type="text"
+                          value={syncConfig.gitBranch || "main"}
+                          onChange={(e) => handleUpdateSyncConfig({ gitBranch: e.target.value })}
+                          placeholder="main"
+                          className="w-full bg-bg-primary border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-text-muted mb-1 font-medium">Personal Access Token</label>
+                        <input
+                          type="password"
+                          value={syncConfig.gitToken || ""}
+                          onChange={(e) => handleUpdateSyncConfig({ gitToken: e.target.value })}
+                          placeholder="ghp_••••••••••••"
+                          className="w-full bg-bg-primary border border-border-subtle rounded-md px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-accent-purple"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-text-faint leading-relaxed">
+                      💡 Notes in local vault folders can also be versioned directly using any system Git client.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

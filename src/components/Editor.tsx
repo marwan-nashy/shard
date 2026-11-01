@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useEffect, useRef, useMemo, useState } from "react";
 import { EditorState } from "@codemirror/state";
 import {
   EditorView,
@@ -18,6 +18,9 @@ import katex from "katex";
 import mermaid from "mermaid";
 import { ViewMode, FeatureFlags } from "../types";
 import { FormattingToolbar } from "./FormattingToolbar";
+import { PropertiesInspector } from "./PropertiesInspector";
+import { KanbanView } from "./KanbanView";
+import { saveAttachment, resolveAttachmentUrl } from "../utils/attachmentHandler";
 
 export interface EditorProps {
   content: string;
@@ -36,6 +39,10 @@ export interface EditorProps {
   onExportPdf?: () => void;
   onExportHtml?: () => void;
   features?: FeatureFlags;
+  vaultPath?: string | null;
+  activeTitle?: string;
+  onOpenTableEditor?: () => void;
+  onOpenAudioMemo?: () => void;
 }
 
 // Mermaid diagram initialization
@@ -138,6 +145,67 @@ class MathWidget extends WidgetType {
       el.textContent = this.math;
     }
     return el;
+  }
+}
+
+// Widget for rendering embedded images in Live Preview
+class ImageWidget extends WidgetType {
+  constructor(readonly src: string, readonly alt: string, readonly vaultPath?: string | null) {
+    super();
+  }
+
+  eq(other: ImageWidget) {
+    return other.src === this.src && other.alt === this.alt;
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "cm-embedded-image my-2 max-w-full overflow-hidden rounded-lg border border-border-subtle bg-bg-card/40 flex flex-col items-center justify-center p-1 select-none";
+    const img = document.createElement("img");
+    img.src = resolveAttachmentUrl(this.src, this.vaultPath);
+    img.alt = this.alt || "Embedded image";
+    img.className = "max-h-96 max-w-full object-contain rounded";
+    img.loading = "lazy";
+    img.onerror = () => {
+      wrap.innerHTML = `<div class="text-xs text-text-muted p-2 flex items-center gap-1.5 font-mono"><span>🖼️</span><span>Failed to load image: ${this.src}</span></div>`;
+    };
+    wrap.appendChild(img);
+    if (this.alt) {
+      const caption = document.createElement("div");
+      caption.className = "text-[11px] text-text-faint mt-1 text-center font-sans";
+      caption.textContent = this.alt;
+      wrap.appendChild(caption);
+    }
+    return wrap;
+  }
+}
+
+// Widget for rendering embedded audio in Live Preview
+class AudioWidget extends WidgetType {
+  constructor(readonly src: string, readonly title: string, readonly vaultPath?: string | null) {
+    super();
+  }
+
+  eq(other: AudioWidget) {
+    return other.src === this.src && other.title === this.title;
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "cm-embedded-audio my-2 p-2.5 rounded-lg bg-bg-card border border-border-subtle flex flex-col gap-1.5 max-w-md select-none";
+    const header = document.createElement("div");
+    header.className = "flex items-center gap-1.5 text-xs text-text-muted font-mono truncate";
+    header.innerHTML = `<span>🎙️</span><span class="truncate">${this.title || "Voice Memo"}</span>`;
+    wrap.appendChild(header);
+
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = resolveAttachmentUrl(this.src, this.vaultPath);
+    audio.className = "w-full h-8 accent-accent-purple";
+    audio.preload = "metadata";
+    wrap.appendChild(audio);
+
+    return wrap;
   }
 }
 
@@ -244,7 +312,8 @@ function wrapSelection(view: EditorView, prefix: string, suffix: string): boolea
 // Live Preview Markdown Decorations Plugin
 function livePreviewPlugin(
   onNavigate: (title: string, heading?: string) => void,
-  features?: FeatureFlags
+  features?: FeatureFlags,
+  vaultPath?: string | null
 ) {
   return ViewPlugin.fromClass(
     class {
@@ -484,6 +553,48 @@ function livePreviewPlugin(
               }
             }
 
+            // 10. Embedded images and voice memos (![[attachments/img.png]] or ![alt](url))
+            const embedRegex = /!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g;
+            let embedMatch;
+            while ((embedMatch = embedRegex.exec(text)) !== null) {
+              const filePath = embedMatch[1].trim();
+              const caption = embedMatch[2]?.trim() || "";
+              const ext = filePath.split(".").pop()?.toLowerCase() || "";
+              const isAudio = ["webm", "mp3", "wav", "m4a", "ogg"].includes(ext);
+              const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+
+              if (isAudio) {
+                widgets.push(
+                  Decoration.widget({
+                    widget: new AudioWidget(filePath, caption || filePath.split("/").pop() || "Audio", vaultPath),
+                    side: 1,
+                  }).range(lineStart + embedMatch.index + embedMatch[0].length)
+                );
+              } else if (isImage) {
+                widgets.push(
+                  Decoration.widget({
+                    widget: new ImageWidget(filePath, caption, vaultPath),
+                    side: 1,
+                  }).range(lineStart + embedMatch.index + embedMatch[0].length)
+                );
+              }
+            }
+
+            const mdImgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+            let mdImgMatch;
+            while ((mdImgMatch = mdImgRegex.exec(text)) !== null) {
+              const alt = mdImgMatch[1];
+              const url = mdImgMatch[2].trim();
+              if (!url.startsWith("[[")) {
+                widgets.push(
+                  Decoration.widget({
+                    widget: new ImageWidget(url, alt, vaultPath),
+                    side: 1,
+                  }).range(lineStart + mdImgMatch.index + mdImgMatch[0].length)
+                );
+              }
+            }
+
             pos = line.to + 1;
           }
         }
@@ -528,9 +639,14 @@ export const Editor: React.FC<EditorProps> = ({
   onExportPdf,
   onExportHtml,
   features,
+  vaultPath,
+  activeTitle,
+  onOpenTableEditor,
+  onOpenAudioMemo,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const [isKanban, setIsKanban] = useState(false);
 
   // Live Stats
   const wordCount = useMemo(() => {
@@ -817,8 +933,57 @@ export const Editor: React.FC<EditorProps> = ({
       }),
     ];
 
+    // Handle image paste & drag-and-drop
+    extensions.push(
+      EditorView.domEventHandlers({
+        paste: (event, view) => {
+          const items = event.clipboardData?.items;
+          if (!items) return false;
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.startsWith("image/")) {
+              const file = item.getAsFile();
+              if (file) {
+                event.preventDefault();
+                saveAttachment(file, vaultPath || null).then((res) => {
+                  const md = `\n![[${res.relativePath}]]\n`;
+                  const { from } = view.state.selection.main;
+                  view.dispatch({
+                    changes: { from, insert: md },
+                    selection: { anchor: from + md.length },
+                  });
+                });
+                return true;
+              }
+            }
+          }
+          return false;
+        },
+        drop: (event, view) => {
+          const files = event.dataTransfer?.files;
+          if (!files || files.length === 0) return false;
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.type.startsWith("image/") || file.type.startsWith("audio/")) {
+              event.preventDefault();
+              saveAttachment(file, vaultPath || null).then((res) => {
+                const md = `\n![[${res.relativePath}]]\n`;
+                const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.from;
+                view.dispatch({
+                  changes: { from: pos, insert: md },
+                  selection: { anchor: pos + md.length },
+                });
+              });
+              return true;
+            }
+          }
+          return false;
+        },
+      })
+    );
+
     if (viewMode === "live") {
-      extensions.push(livePreviewPlugin(onNavigateToNote, features));
+      extensions.push(livePreviewPlugin(onNavigateToNote, features, vaultPath));
     }
 
     const state = EditorState.create({
@@ -836,7 +1001,7 @@ export const Editor: React.FC<EditorProps> = ({
     return () => {
       view.destroy();
     };
-  }, [viewMode]);
+  }, [viewMode, vaultPath]);
 
   // Sync external content update
   useEffect(() => {
@@ -899,11 +1064,36 @@ export const Editor: React.FC<EditorProps> = ({
           onExportPdf={onExportPdf}
           onExportHtml={onExportHtml}
           features={features}
+          onOpenTableEditor={onOpenTableEditor}
+          onOpenAudioMemo={onOpenAudioMemo}
+          onToggleKanban={() => setIsKanban((prev) => !prev)}
+          isKanban={isKanban}
         />
       )}
 
-      {/* CodeMirror Scroller Container */}
-      <div ref={containerRef} className="w-full h-full flex-1 overflow-hidden" />
+      {/* Frontmatter YAML Properties Inspector */}
+      {features?.propertiesInspector !== false && !isKanban && (
+        <PropertiesInspector
+          content={content}
+          onChange={onChange}
+          features={features}
+        />
+      )}
+
+      {/* Either Kanban Board or CodeMirror Scroller Container */}
+      {isKanban && features?.kanbanView !== false ? (
+        <div className="w-full flex-1 overflow-hidden p-3 bg-bg-secondary/40">
+          <KanbanView
+            content={content}
+            onChange={onChange}
+            noteTitle={activeTitle}
+            textDirection={textDirection}
+            features={features}
+          />
+        </div>
+      ) : (
+        <div ref={containerRef} className="w-full h-full flex-1 overflow-hidden" />
+      )}
     </div>
   );
 };

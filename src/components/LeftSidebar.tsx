@@ -76,6 +76,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchSort, setSearchSort] = useState<"relevance" | "title" | "path">("relevance");
+
+  const sortedSearchResults = useMemo(() => {
+    if (searchSort === "title") {
+      return [...searchResults].sort((a, b) => a.title.localeCompare(b.title));
+    }
+    if (searchSort === "path") {
+      return [...searchResults].sort((a, b) => a.path.localeCompare(b.path));
+    }
+    return searchResults;
+  }, [searchResults, searchSort]);
 
   // Tag View State
   const [tagQuery, setTagQuery] = useState("");
@@ -267,13 +278,66 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               )}
             </div>
 
+            {/* Quick Syntax Filter Pills */}
+            <div className="flex items-center gap-1 flex-wrap px-0.5 text-[10px]">
+              <span className="text-text-faint">Filters:</span>
+              <button
+                type="button"
+                onClick={() => handleSearchChange(searchQuery ? `${searchQuery} #` : "#")}
+                className="px-1.5 py-0.5 rounded bg-bg-card hover:bg-bg-hover text-accent-purple border border-border-subtle transition-colors cursor-pointer"
+                title="Search by tag (#tag)"
+              >
+                #tag
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSearchChange(searchQuery ? `${searchQuery} path:` : "path:")}
+                className="px-1.5 py-0.5 rounded bg-bg-card hover:bg-bg-hover text-accent-blue border border-border-subtle transition-colors cursor-pointer"
+                title="Filter by folder path (path:folder/)"
+              >
+                path:
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSearchChange(searchQuery ? `${searchQuery} task:todo` : "task:todo")}
+                className="px-1.5 py-0.5 rounded bg-bg-card hover:bg-bg-hover text-accent-yellow border border-border-subtle transition-colors cursor-pointer"
+                title="Find uncompleted tasks (task:todo)"
+              >
+                task:todo
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSearchChange(searchQuery ? `${searchQuery} task:done` : "task:done")}
+                className="px-1.5 py-0.5 rounded bg-bg-card hover:bg-bg-hover text-accent-green border border-border-subtle transition-colors cursor-pointer"
+                title="Find completed tasks (task:done)"
+              >
+                task:done
+              </button>
+            </div>
+
+            {/* Sort Controls */}
+            {searchResults.length > 1 && (
+              <div className="flex items-center justify-between px-1 text-[11px] text-text-faint border-b border-border-subtle/40 pb-1">
+                <span>{searchResults.length} results</span>
+                <select
+                  value={searchSort}
+                  onChange={(e) => setSearchSort(e.target.value as "relevance" | "title" | "path")}
+                  className="bg-bg-card border border-border-subtle rounded px-1.5 py-0.5 text-[10px] text-text-muted focus:outline-none"
+                >
+                  <option value="relevance">Relevance</option>
+                  <option value="title">Title (A-Z)</option>
+                  <option value="path">Path</option>
+                </select>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto space-y-2">
               {isSearching ? (
                 <div className="text-center text-text-faint text-[11px] py-4">
                   Searching...
                 </div>
-              ) : searchResults.length > 0 ? (
-                searchResults.map((result, idx) => (
+              ) : sortedSearchResults.length > 0 ? (
+                sortedSearchResults.map((result, idx) => (
                   <div
                     key={idx}
                     onClick={() => onSelectFile(result.path)}
@@ -293,7 +357,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 </div>
               ) : (
                 <div className="text-center text-text-faint text-[11px] py-4">
-                  Type to search note contents.
+                  Type to search note contents or use filters above.
                 </div>
               )}
             </div>

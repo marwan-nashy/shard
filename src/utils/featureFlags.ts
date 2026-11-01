@@ -5,6 +5,7 @@ export type { FeatureFlags };
 export const DEFAULT_FEATURES: FeatureFlags = {
   graphView: true,
   canvasView: true,
+  kanbanView: true,
   dailyNotes: true,
   vaultStats: true,
 
@@ -15,13 +16,18 @@ export const DEFAULT_FEATURES: FeatureFlags = {
   sidebarBookmarks: true,
 
   formattingToolbar: true,
+  propertiesInspector: true,
+  tableEditor: true,
   voiceDictation: true,
+  audioRecorder: true,
   templates: true,
   versionHistory: true,
   mermaidDiagrams: true,
   mathLatex: true,
   documentExport: true,
   statusBar: true,
+
+  syncManager: true,
 };
 
 export interface FeatureMeta {
@@ -50,6 +56,14 @@ export const FEATURE_METADATA: FeatureMeta[] = [
     nameAr: "لوحة العمل اللانهائية (Canvas)",
     description: "Infinite 2D spatial canvas with movable cards, text blocks, and directional arrows.",
     descriptionAr: "مساحة بيضاء لانهائية لترتيب البطاقات والأفكار مع أسهم توجيهية.",
+  },
+  {
+    key: "kanbanView",
+    category: "views",
+    name: "Markdown Kanban Boards",
+    nameAr: "لوحات كانبان للمهام (Kanban)",
+    description: "Drag-and-drop Kanban board view for any markdown note with headers.",
+    descriptionAr: "عرض كانبان تفاعلي مع سحب وإفلات لبطاقات ومهام الملاحظة المعتمدة على العناوين.",
   },
   {
     key: "dailyNotes",
@@ -120,6 +134,22 @@ export const FEATURE_METADATA: FeatureMeta[] = [
     descriptionAr: "شريط أدوات للتنسيقات والعناوين والتنبيهات. يمكن إخفاؤه لتجربة كتابة خالية تماماً من المشتتات.",
   },
   {
+    key: "propertiesInspector",
+    category: "editor",
+    name: "YAML Frontmatter Properties",
+    nameAr: "مفتش خصائص الملاحظة (Frontmatter)",
+    description: "Collapsible structured metadata properties card at the top of notes.",
+    descriptionAr: "لوحة خصائص منظمة أعلى الملاحظة للوسوم والتواريخ والحقول الوصفية.",
+  },
+  {
+    key: "tableEditor",
+    category: "editor",
+    name: "Visual Table Editor",
+    nameAr: "محرر الجداول التفاعلي",
+    description: "1-click visual adding, reordering, and editing of markdown table rows and columns.",
+    descriptionAr: "أداة بصرية سهلة لإضافة وتعديل صفوف وأعمدة الجداول بدون كتابة الرموز يدوياً.",
+  },
+  {
     key: "mermaidDiagrams",
     category: "editor",
     name: "Mermaid.js Diagrams",
@@ -152,6 +182,22 @@ export const FEATURE_METADATA: FeatureMeta[] = [
     nameAr: "الإملاء الصوتي (تحويل الصوت لكتابة)",
     description: "Microphone button to speak notes in Arabic or English with zero cloud bloat.",
     descriptionAr: "زر الميكروفون للكتابة بالصوت باللغتين العربية والإنجليزية محلياً بدون خوادم خارجية.",
+  },
+  {
+    key: "audioRecorder",
+    category: "tools",
+    name: "Local Voice Memo Recorder",
+    nameAr: "مسجل المذكرات الصوتية المحلية",
+    description: "Record audio clips directly into your vault with local playback player.",
+    descriptionAr: "تسجيل مقاطع ومذكرات صوتية وحفظها مباشرة داخل المستودع مع مشغل مدمج.",
+  },
+  {
+    key: "syncManager",
+    category: "tools",
+    name: "Auto-Sync (Git & WebDAV)",
+    nameAr: "المزامنة التلقائية (Git و WebDAV)",
+    description: "Automatic background vault sync with GitHub, GitLab, or personal WebDAV cloud.",
+    descriptionAr: "مزامنة سحابية خاصة لمستودعك مع جيت هاب أو خوادم WebDAV بأمان تام.",
   },
   {
     key: "templates",

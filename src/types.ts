@@ -132,10 +132,53 @@ export interface CanvasData {
   edges: CanvasEdgeData[];
 }
 
+export interface KanbanCard {
+  id: string;
+  content: string;
+  isTask: boolean;
+  completed: boolean;
+  tags: string[];
+}
+
+export interface KanbanColumn {
+  id: string;
+  title: string;
+  cards: KanbanCard[];
+}
+
+export interface FrontmatterProperty {
+  key: string;
+  value: any;
+  type: "text" | "tags" | "date" | "number" | "checkbox";
+}
+
+export interface SyncConfig {
+  provider: "none" | "git" | "webdav";
+  autoSync: boolean;
+  syncIntervalMinutes: number;
+  webdavUrl: string;
+  webdavUsername: string;
+  webdavPassword: string;
+  gitRemoteUrl: string;
+  gitBranch: string;
+  gitToken: string;
+  lastSyncTime?: number;
+  lastSyncStatus?: "idle" | "success" | "error" | "syncing";
+  lastSyncMessage?: string;
+}
+
+export interface CustomShortcut {
+  id: string;
+  title: string;
+  defaultKey: string;
+  customKey: string;
+}
+
 export interface FeatureFlags {
   // Core Views
   graphView: boolean;
   canvasView: boolean;
+  kanbanView: boolean;
   dailyNotes: boolean;
   vaultStats: boolean;
 
@@ -148,12 +191,18 @@ export interface FeatureFlags {
 
   // Editor & Formatting
   formattingToolbar: boolean;
+  propertiesInspector: boolean;
+  tableEditor: boolean;
   voiceDictation: boolean;
+  audioRecorder: boolean;
   templates: boolean;
   versionHistory: boolean;
   mermaidDiagrams: boolean;
   mathLatex: boolean;
   documentExport: boolean;
   statusBar: boolean;
+
+  // Sync & Storage
+  syncManager: boolean;
 }
 

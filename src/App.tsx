@@ -43,6 +43,10 @@ import { LocalGraph } from "./components/LocalGraph";
 import { TemplateModal } from "./components/TemplateModal";
 import { HistoryModal } from "./components/HistoryModal";
 import { VaultStatsModal } from "./components/VaultStatsModal";
+import { TableEditorModal } from "./components/TableEditorModal";
+import { AudioMemoModal } from "./components/AudioMemoModal";
+import { applyTypography, applyCustomCss } from "./utils/customStyles";
+import { executeAdvancedSearch } from "./utils/advancedSearch";
 import { exportNoteToPdf, exportNoteToHtml } from "./utils/documentExport";
 import { saveNoteSnapshot } from "./utils/versionHistory";
 import { loadFeatureFlags, saveFeatureFlags, DEFAULT_FEATURES } from "./utils/featureFlags";
@@ -192,6 +196,8 @@ export default function App() {
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [statsModalOpen, setStatsModalOpen] = useState(false);
+  const [tableEditorOpen, setTableEditorOpen] = useState(false);
+  const [audioMemoOpen, setAudioMemoOpen] = useState(false);
 
   // Modular Feature Flags (Hide features you don't like)
   const [features, setFeatures] = useState<FeatureFlags>(() => loadFeatureFlags());
@@ -253,6 +259,12 @@ export default function App() {
     setAutoCheckEnabled(enabled);
     setAutoCheckUpdates(enabled);
   };
+
+  // Initialize custom typography & CSS on startup
+  useEffect(() => {
+    applyTypography();
+    applyCustomCss();
+  }, []);
 
   // Run automatic background update check on startup
   useEffect(() => {
@@ -803,6 +815,25 @@ export default function App() {
 
   // Search vault
   const handleSearchVault = async (query: string): Promise<SearchResult[]> => {
+    if (!query.trim()) return [];
+
+    const hasOperators = /(tag:|#|path:|task:|file:|")/i.test(query);
+    if (hasOperators || !vaultPath) {
+      const searchItems = allNotes.map((n) => {
+        const gNode = graphData.nodes.find((g) => g.path === n.path);
+        return {
+          title: n.title,
+          path: n.path,
+          content: n.path === activePath ? activeContent : "",
+          tags: gNode?.tags || [],
+        };
+      });
+      const advancedResults = executeAdvancedSearch(query, searchItems);
+      if (advancedResults.length > 0 || !vaultPath) {
+        return advancedResults;
+      }
+    }
+
     if (!vaultPath) return [];
     try {
       return await invoke<SearchResult[]>("search_vault", { vaultPath, query });
@@ -1250,6 +1281,10 @@ export default function App() {
                       onExportPdf={handleExportPdf}
                       onExportHtml={handleExportHtml}
                       features={features}
+                      vaultPath={vaultPath}
+                      activeTitle={activeTitle}
+                      onOpenTableEditor={() => setTableEditorOpen(true)}
+                      onOpenAudioMemo={() => setAudioMemoOpen(true)}
                     />
                   </div>
 
@@ -1263,6 +1298,8 @@ export default function App() {
                         allNoteTitles={allNoteTitles}
                         onNavigateToNote={() => {}}
                         features={features}
+                        vaultPath={vaultPath}
+                        activeTitle={activeTitle}
                       />
                     </div>
                   )}
@@ -1754,6 +1791,35 @@ export default function App() {
         allTags={allTags}
         graphData={graphData}
         onNavigateToNote={(path) => openNote(path)}
+      />
+
+      {/* Visual Markdown Table Editor Modal */}
+      <TableEditorModal
+        isOpen={tableEditorOpen}
+        onClose={() => setTableEditorOpen(false)}
+        onInsertTable={(tableMd) => {
+          if (activeContent) {
+            handleUpdateNoteContent(activePath!, `${activeContent}\n\n${tableMd}\n`);
+          } else if (activePath) {
+            handleUpdateNoteContent(activePath, `${tableMd}\n`);
+          }
+        }}
+        language={language}
+      />
+
+      {/* Voice Audio Memo Recorder Modal */}
+      <AudioMemoModal
+        isOpen={audioMemoOpen}
+        onClose={() => setAudioMemoOpen(false)}
+        vaultPath={vaultPath}
+        onInsertAudio={(link: string) => {
+          if (activeContent) {
+            handleUpdateNoteContent(activePath!, `${activeContent}\n\n${link}\n`);
+          } else if (activePath) {
+            handleUpdateNoteContent(activePath, `${link}\n`);
+          }
+        }}
+        language={language}
       />
     </div>
   );
