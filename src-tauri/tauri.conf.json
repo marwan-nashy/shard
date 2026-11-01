@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Shard",
-  "version": "0.1.0",
-  "identifier": "com.shardnotes.app",
+  "version": "0.2.0",
+  "identifier": "com.shardnotes.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

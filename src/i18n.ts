@@ -250,7 +250,7 @@ export const translations: Record<Language, Translations> = {
       shortcutsTitle: "Keyboard Shortcuts",
       shortcutsDesc: "Modifiers strictly appear before letters.",
       aboutDesc: "Shard is a high-performance, zero-bloat local knowledge base and visual canvas designed for maximum speed and simplicity.",
-      aboutVersion: "v0.1.0 (Native Release)",
+      aboutVersion: "v0.2.0 (Zero-Bloat Release)",
       fontHint: "Arabic text renders with optimal Cairo, Segoe UI, and Tahoma typography.",
     },
     dialogs: {
@@ -380,7 +380,7 @@ export const translations: Record<Language, Translations> = {
       shortcutsTitle: "اختصارات لوحة المفاتيح",
       shortcutsDesc: "المفاتيح التعديلية تسبق الحروف دائمًا.",
       aboutDesc: "شارد (Shard) قاعدة معرفية شخصية فائقة الخفة والسرعة تعمل محليًا وبدون استهلاك متصفحات إلكترون.",
-      aboutVersion: "الإصدار 0.1.0 (إصدار محلي)",
+      aboutVersion: "الإصدار 0.2.0 (إصدار فائق الخفة)",
       fontHint: "تُعرض النصوص العربية بأعلى وضوح باستخدام خطوط Cairo و Segoe UI و Tahoma.",
     },
     dialogs: {

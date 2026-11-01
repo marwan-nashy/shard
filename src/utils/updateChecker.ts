@@ -17,7 +17,7 @@ export interface UpdateInfo {
   assets: ReleaseAsset[];
 }
 
-export const CURRENT_VERSION = "0.1.0";
+export const CURRENT_VERSION = "0.2.0";
 const GITHUB_REPO = "marwan-nashy/shard";
 const AUTO_CHECK_KEY = "shard_auto_check_updates";
 const LAST_CHECKED_KEY = "shard_last_checked_update";

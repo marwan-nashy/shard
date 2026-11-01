@@ -1,6 +1,6 @@
 [package]
 name = "shard"
-version = "0.1.0"
+version = "0.2.0"
 description = "An ultra-lightweight, zero-bloat, local-first Markdown knowledge base and visual canvas built with Rust and Tauri v2."
 authors = ["Marwan"]
 edition = "2021"
@@ -23,7 +23,7 @@ directories = "5.0"
 
 [profile.release]
 codegen-units = 1
-lto = true
+lto = "thin"
 opt-level = 3
 panic = "abort"
 strip = true
