@@ -32,6 +32,14 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Office",
+    "shortDescription": "Lightweight local-first markdown knowledge base and visual canvas",
+    "longDescription": "Shard is an ultra-lightweight, zero-bloat, local-first Markdown knowledge base and visual canvas built with Rust and Tauri v2. Designed for low-spec PCs and laptops.",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37"]
+      }
+    }
   }
 }

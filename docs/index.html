@@ -530,7 +530,7 @@
     </p>
 
     <!-- Download Options Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
       <!-- 1. Portable -->
       <div class="bg-bg-card border-2 border-accent-purple/40 rounded-2xl p-6 relative flex flex-col justify-between shadow-[0_0_30px_rgba(123,108,217,0.2)]">
         <div>
@@ -575,15 +575,53 @@
           <div class="inline-block px-2.5 py-0.5 rounded-full bg-white/10 text-text-muted text-[10px] font-mono font-semibold uppercase mb-3">
             Enterprise
           </div>
-          <h3 class="text-lg font-bold text-white mb-1">Windows MSI Package</h3>
+          <h3 class="text-lg font-bold text-white mb-1">Windows MSI</h3>
           <p class="text-xs text-text-muted mb-4">
-            Standard Windows Installer (MSI) for system administrators, automated deployment, and IT environments.
+            Standard Windows Installer (MSI) for system administrators and automated deployment.
           </p>
         </div>
         <div>
           <a href="https://github.com/marwan-nashy/shard/releases/download/v0.1.0/Shard-Setup.msi" class="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
             <i data-lucide="package" class="w-4 h-4 text-accent-emerald"></i>
             <span>Download MSI (2.3 MB)</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 4. Linux Universal AppImage & DEB -->
+      <div class="bg-bg-card border border-white/10 rounded-2xl p-6 relative flex flex-col justify-between hover:border-white/20 transition-colors">
+        <div>
+          <div class="inline-block px-2.5 py-0.5 rounded-full bg-accent-blue/20 text-accent-blue text-[10px] font-mono font-semibold uppercase mb-3">
+            Linux
+          </div>
+          <h3 class="text-lg font-bold text-white mb-1">Linux (AppImage / DEB)</h3>
+          <p class="text-xs text-text-muted mb-4">
+            Universal AppImage running on Ubuntu, Arch, Fedora, openSUSE, and Debian/Mint DEB packages.
+          </p>
+        </div>
+        <div class="flex flex-col gap-2">
+          <a href="https://github.com/marwan-nashy/shard/releases" class="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
+            <i data-lucide="terminal" class="w-4 h-4 text-accent-blue"></i>
+            <span>Linux AppImage & DEB</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 5. Mobile & In-Browser PWA -->
+      <div class="bg-bg-card border border-accent-purple/30 rounded-2xl p-6 relative flex flex-col justify-between hover:border-accent-purple transition-colors">
+        <div>
+          <div class="inline-block px-2.5 py-0.5 rounded-full bg-accent-purple/20 text-accent-purple text-[10px] font-mono font-semibold uppercase mb-3">
+            Mobile & Web
+          </div>
+          <h3 class="text-lg font-bold text-white mb-1">Android, iOS & Web</h3>
+          <p class="text-xs text-text-muted mb-4">
+            Installable Progressive Web App (PWA). Works 100% offline with native touch gestures and Home Screen launch.
+          </p>
+        </div>
+        <div>
+          <a href="./app/" class="w-full py-2.5 px-4 rounded-xl bg-accent-purple hover:bg-accent-purpleHover text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
+            <i data-lucide="smartphone" class="w-4 h-4"></i>
+            <span>Launch Mobile PWA</span>
           </a>
         </div>
       </div>

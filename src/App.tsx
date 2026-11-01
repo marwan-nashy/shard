@@ -22,7 +22,19 @@ import { QuickSwitcher } from "./components/QuickSwitcher";
 import { BacklinksPane } from "./components/BacklinksPane";
 import { SettingsModal } from "./components/SettingsModal";
 import { VaultSelectorModal } from "./components/VaultSelectorModal";
-import { Link2, ListTree } from "lucide-react";
+import {
+  Link2,
+  ListTree,
+  Menu,
+  Folder,
+  FileText,
+  Search,
+  Share2,
+  LayoutGrid,
+  Settings,
+  PanelRight,
+  X,
+} from "lucide-react";
 import { Language, TextDirection, translations } from "./i18n";
 
 export default function App() {
@@ -74,11 +86,32 @@ export default function App() {
   // Views & panes
   const [activeView, setActiveView] = useState<"editor" | "graph" | "canvas">("editor");
   const [viewMode, setViewMode] = useState<ViewMode>("live");
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("files");
   const [rightSidebarTab, setRightSidebarTab] = useState<RightSidebarTab>("backlinks");
   const [isSplit, setIsSplit] = useState(false);
+
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    return typeof window !== "undefined" ? window.innerWidth < 768 : false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setLeftSidebarOpen(false);
+        setRightSidebarOpen(false);
+      } else {
+        setLeftSidebarOpen(true);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Modals & Overlays
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
@@ -183,6 +216,11 @@ export default function App() {
         setActiveView("canvas");
       } else {
         setActiveView("editor");
+      }
+
+      if (isMobile) {
+        setLeftSidebarOpen(false);
+        setRightSidebarOpen(false);
       }
 
       // Add to tabs if not already present
@@ -750,59 +788,140 @@ export default function App() {
       className="flex flex-col h-screen w-screen bg-bg-primary text-text-primary overflow-hidden font-sans select-none"
     >
       {/* Main Workspace Row */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* 1. Left Activity Ribbon (42px) */}
-        <Ribbon
-          activeView={activeView}
-          onToggleView={setActiveView}
-          onToggleSidebar={() => setLeftSidebarOpen((prev) => !prev)}
-          onOpenQuickSwitcher={() => {
-            setQuickSwitcherMode("notes");
-            setQuickSwitcherOpen(true);
-          }}
-          onOpenDailyNote={handleDailyNote}
-          onOpenCanvas={handleOpenCanvasView}
-          onOpenVaultDialog={() => setVaultSelectorOpen(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          t={t.ribbon}
-          textDirection={textDirection}
-          onToggleTextDirection={cycleTextDirection}
-        />
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* 1. Left Activity Ribbon (Desktop only: 42px) */}
+        {!isMobile && (
+          <Ribbon
+            activeView={activeView}
+            onToggleView={setActiveView}
+            onToggleSidebar={() => setLeftSidebarOpen((prev) => !prev)}
+            onOpenQuickSwitcher={() => {
+              setQuickSwitcherMode("notes");
+              setQuickSwitcherOpen(true);
+            }}
+            onOpenDailyNote={handleDailyNote}
+            onOpenCanvas={handleOpenCanvasView}
+            onOpenVaultDialog={() => setVaultSelectorOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            t={t.ribbon}
+            textDirection={textDirection}
+            onToggleTextDirection={cycleTextDirection}
+          />
+        )}
 
         {/* 2. Left Multi-Tab Sidebar (Files, Search, Tags, Outline) */}
-        {leftSidebarOpen && (
-          <div className="w-64 bg-bg-secondary border-r border-border-subtle flex flex-col shrink-0">
-            <LeftSidebar
-              activeTab={sidebarTab}
-              onTabChange={setSidebarTab}
-              nodes={fileNodes}
-              activePath={activePath}
-              onSelectFile={openNote}
-              onCreateNote={handleCreateNote}
-              onCreateFolder={handleCreateFolder}
-              onCreateCanvas={handleCreateCanvas}
-              onRenameItem={(path, name) =>
-                setRenameDialog({
-                  isOpen: true,
-                  path,
-                  oldName: name,
-                  newName: name.replace(/\.(md|canvas)$/, ""),
-                })
-              }
-              onDeleteItem={handleDeleteItem}
-              onSearchVault={handleSearchVault}
-              allNotes={allNotes}
-              allTags={allTags}
-              onNavigateToNote={openNote}
-              activeContent={activeContent}
-              onJumpToHeading={(heading) => setTargetHeading(heading)}
-              t={t.sidebar}
-            />
-          </div>
-        )}
+        {leftSidebarOpen &&
+          (isMobile ? (
+            <div className="fixed inset-0 z-50 flex">
+              <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={() => setLeftSidebarOpen(false)}
+              />
+              <div className="relative w-72 max-w-[85vw] h-full bg-bg-secondary border-r border-border-subtle flex flex-col z-10 shadow-2xl">
+                <LeftSidebar
+                  activeTab={sidebarTab}
+                  onTabChange={setSidebarTab}
+                  nodes={fileNodes}
+                  activePath={activePath}
+                  onSelectFile={openNote}
+                  onCreateNote={handleCreateNote}
+                  onCreateFolder={handleCreateFolder}
+                  onCreateCanvas={handleCreateCanvas}
+                  onRenameItem={(path, name) =>
+                    setRenameDialog({
+                      isOpen: true,
+                      path,
+                      oldName: name,
+                      newName: name.replace(/\.(md|canvas)$/, ""),
+                    })
+                  }
+                  onDeleteItem={handleDeleteItem}
+                  onSearchVault={handleSearchVault}
+                  allNotes={allNotes}
+                  allTags={allTags}
+                  onNavigateToNote={openNote}
+                  activeContent={activeContent}
+                  onJumpToHeading={(heading) => setTargetHeading(heading)}
+                  t={t.sidebar}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="w-64 bg-bg-secondary border-r border-border-subtle flex flex-col shrink-0">
+              <LeftSidebar
+                activeTab={sidebarTab}
+                onTabChange={setSidebarTab}
+                nodes={fileNodes}
+                activePath={activePath}
+                onSelectFile={openNote}
+                onCreateNote={handleCreateNote}
+                onCreateFolder={handleCreateFolder}
+                onCreateCanvas={handleCreateCanvas}
+                onRenameItem={(path, name) =>
+                  setRenameDialog({
+                    isOpen: true,
+                    path,
+                    oldName: name,
+                    newName: name.replace(/\.(md|canvas)$/, ""),
+                  })
+                }
+                onDeleteItem={handleDeleteItem}
+                onSearchVault={handleSearchVault}
+                allNotes={allNotes}
+                allTags={allTags}
+                onNavigateToNote={openNote}
+                activeContent={activeContent}
+                onJumpToHeading={(heading) => setTargetHeading(heading)}
+                t={t.sidebar}
+              />
+            </div>
+          ))}
 
         {/* 3. Central Document Workspace */}
         <div className="flex-1 flex flex-col min-w-0 bg-bg-primary overflow-hidden">
+          {/* Mobile Top Header */}
+          {isMobile && (
+            <div className="h-11 bg-bg-secondary border-b border-border-subtle flex items-center justify-between px-3 select-none shrink-0">
+              <button
+                onClick={() => setLeftSidebarOpen(true)}
+                className="p-1.5 -ml-1 text-text-muted hover:text-text-primary rounded-md hover:bg-bg-hover flex items-center gap-2"
+                title="Open Vault Files"
+              >
+                <Menu className="w-5 h-5 text-accent-purple" />
+                <span className="text-xs font-semibold text-text-primary tracking-wide truncate max-w-[180px]">
+                  {activePath
+                    ? activePath.split(/[\\/]/).pop()?.replace(/\.(md|canvas)$/, "")
+                    : vaultPath
+                    ? vaultPath.split(/[\\/]/).pop()
+                    : "Shard"}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    setQuickSwitcherMode("notes");
+                    setQuickSwitcherOpen(true);
+                  }}
+                  className="p-1.5 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover"
+                  title="Quick Switcher"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setRightSidebarOpen((prev) => !prev)}
+                  className={`p-1.5 rounded transition-colors ${
+                    rightSidebarOpen
+                      ? "text-accent-purple bg-accent-purple/15"
+                      : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                  }`}
+                  title="Outline / Backlinks"
+                >
+                  <PanelRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
           {/* Document Tab Bar */}
           <TabBar
             tabs={tabs}
@@ -918,87 +1037,253 @@ export default function App() {
         </div>
 
         {/* 4. Right Sidebar (Backlinks & Outline) */}
-        {rightSidebarOpen && (
-          <div className="w-72 bg-bg-secondary border-l border-border-subtle flex flex-col shrink-0">
-            {/* Right Sidebar Header Tabs */}
-            <div className="flex items-center border-b border-border-subtle bg-bg-secondary/80 px-2 py-1 gap-1">
-              <button
-                onClick={() => setRightSidebarTab("backlinks")}
-                className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
-                  rightSidebarTab === "backlinks"
-                    ? "bg-bg-card text-accent-purple font-medium"
-                    : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-                }`}
-              >
-                <Link2 className="w-3.5 h-3.5" />
-                <span>Backlinks</span>
-              </button>
-              <button
-                onClick={() => setRightSidebarTab("outline")}
-                className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
-                  rightSidebarTab === "outline"
-                    ? "bg-bg-card text-accent-purple font-medium"
-                    : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-                }`}
-              >
-                <ListTree className="w-3.5 h-3.5" />
-                <span>Outline</span>
-              </button>
-            </div>
+        {rightSidebarOpen &&
+          (isMobile ? (
+            <div className="fixed inset-0 z-50 flex justify-end">
+              <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={() => setRightSidebarOpen(false)}
+              />
+              <div className="relative w-80 max-w-[85vw] h-full bg-bg-secondary border-l border-border-subtle flex flex-col z-10 shadow-2xl">
+                {/* Right Sidebar Header Tabs */}
+                <div className="flex items-center justify-between border-b border-border-subtle bg-bg-secondary/80 px-2 py-1.5">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setRightSidebarTab("backlinks")}
+                      className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                        rightSidebarTab === "backlinks"
+                          ? "bg-bg-card text-accent-purple font-medium"
+                          : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                      }`}
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>Backlinks</span>
+                    </button>
+                    <button
+                      onClick={() => setRightSidebarTab("outline")}
+                      className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                        rightSidebarTab === "outline"
+                          ? "bg-bg-card text-accent-purple font-medium"
+                          : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                      }`}
+                    >
+                      <ListTree className="w-3.5 h-3.5" />
+                      <span>Outline</span>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setRightSidebarOpen(false)}
+                    className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-bg-hover"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-            {/* Right Sidebar Content */}
-            <div className="flex-1 overflow-hidden">
-              {rightSidebarTab === "backlinks" ? (
-                <BacklinksPane
-                  currentTitle={
-                    activePath
-                      ?.split(/[\\/]/)
-                      .pop()
-                      ?.replace(/\.(md|canvas)$/, "") || "Untitled"
-                  }
-                  data={backlinks}
-                  onNavigate={(title) => {
-                    const target = allNotes.find((n) => n.title === title);
-                    if (target) openNote(target.path);
-                  }}
-                />
-              ) : (
-                <div className="flex flex-col h-full p-2 space-y-1 overflow-y-auto">
-                  {outlineHeadings.length === 0 ? (
-                    <div className="text-center text-text-faint text-[11px] py-8">
-                      No headings in current note.
-                    </div>
+                {/* Right Sidebar Content */}
+                <div className="flex-1 overflow-hidden">
+                  {rightSidebarTab === "backlinks" ? (
+                    <BacklinksPane
+                      currentTitle={
+                        activePath
+                          ?.split(/[\\/]/)
+                          .pop()
+                          ?.replace(/\.(md|canvas)$/, "") || "Untitled"
+                      }
+                      data={backlinks}
+                      onNavigate={(title) => {
+                        const target = allNotes.find((n) => n.title === title);
+                        if (target) openNote(target.path);
+                      }}
+                    />
                   ) : (
-                    outlineHeadings.map((item, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setTargetHeading(item.title)}
-                        style={{ paddingLeft: `${(item.level - 1) * 12 + 6}px` }}
-                        className="flex items-center gap-1.5 py-1 px-2 rounded hover:bg-bg-hover cursor-pointer text-text-muted hover:text-text-primary transition-colors text-xs"
-                      >
-                        <span className="text-[10px] font-mono text-accent-purple font-semibold">
-                          H{item.level}
-                        </span>
-                        <span className="truncate flex-1">{item.title}</span>
-                      </div>
-                    ))
+                    <div className="flex flex-col h-full p-2 space-y-1 overflow-y-auto">
+                      {outlineHeadings.length === 0 ? (
+                        <div className="text-center text-text-faint text-[11px] py-8">
+                          No headings in current note.
+                        </div>
+                      ) : (
+                        outlineHeadings.map((item, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              setTargetHeading(item.title);
+                              setRightSidebarOpen(false);
+                            }}
+                            style={{ paddingLeft: `${(item.level - 1) * 12 + 6}px` }}
+                            className="flex items-center gap-1.5 py-1 px-2 rounded hover:bg-bg-hover cursor-pointer text-text-muted hover:text-text-primary transition-colors text-xs"
+                          >
+                            <span className="text-[10px] font-mono text-accent-purple font-semibold">
+                              H{item.level}
+                            </span>
+                            <span className="truncate flex-1">{item.title}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="w-72 bg-bg-secondary border-l border-border-subtle flex flex-col shrink-0">
+              {/* Right Sidebar Header Tabs */}
+              <div className="flex items-center border-b border-border-subtle bg-bg-secondary/80 px-2 py-1 gap-1">
+                <button
+                  onClick={() => setRightSidebarTab("backlinks")}
+                  className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                    rightSidebarTab === "backlinks"
+                      ? "bg-bg-card text-accent-purple font-medium"
+                      : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                  }`}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>Backlinks</span>
+                </button>
+                <button
+                  onClick={() => setRightSidebarTab("outline")}
+                  className={`px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                    rightSidebarTab === "outline"
+                      ? "bg-bg-card text-accent-purple font-medium"
+                      : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+                  }`}
+                >
+                  <ListTree className="w-3.5 h-3.5" />
+                  <span>Outline</span>
+                </button>
+              </div>
+
+              {/* Right Sidebar Content */}
+              <div className="flex-1 overflow-hidden">
+                {rightSidebarTab === "backlinks" ? (
+                  <BacklinksPane
+                    currentTitle={
+                      activePath
+                        ?.split(/[\\/]/)
+                        .pop()
+                        ?.replace(/\.(md|canvas)$/, "") || "Untitled"
+                    }
+                    data={backlinks}
+                    onNavigate={(title) => {
+                      const target = allNotes.find((n) => n.title === title);
+                      if (target) openNote(target.path);
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col h-full p-2 space-y-1 overflow-y-auto">
+                    {outlineHeadings.length === 0 ? (
+                      <div className="text-center text-text-faint text-[11px] py-8">
+                        No headings in current note.
+                      </div>
+                    ) : (
+                      outlineHeadings.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setTargetHeading(item.title)}
+                          style={{ paddingLeft: `${(item.level - 1) * 12 + 6}px` }}
+                          className="flex items-center gap-1.5 py-1 px-2 rounded hover:bg-bg-hover cursor-pointer text-text-muted hover:text-text-primary transition-colors text-xs"
+                        >
+                          <span className="text-[10px] font-mono text-accent-purple font-semibold">
+                            H{item.level}
+                          </span>
+                          <span className="truncate flex-1">{item.title}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
       </div>
 
-      {/* Status Bar */}
-      <StatusBar
-        status={statusMessage}
-        activePath={activePath}
-        content={activeContent}
-        t={t.statusBar}
-        textDirection={textDirection}
-        onToggleTextDirection={cycleTextDirection}
-      />
+      {/* Mobile Bottom Navigation Bar */}
+      {isMobile && (
+        <div className="h-14 bg-bg-secondary border-t border-border-subtle flex items-center justify-around px-2 z-40 select-none shrink-0">
+          <button
+            onClick={() => setLeftSidebarOpen(true)}
+            className="flex flex-col items-center justify-center p-1 text-text-muted hover:text-text-primary active:scale-95 transition-transform"
+            title="Files"
+          >
+            <Folder className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 font-medium">{t.sidebar?.files || "Files"}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveView("editor");
+              setLeftSidebarOpen(false);
+            }}
+            className={`flex flex-col items-center justify-center p-1 active:scale-95 transition-transform ${
+              activeView === "editor" ? "text-accent-purple font-semibold" : "text-text-muted hover:text-text-primary"
+            }`}
+            title="Editor"
+          >
+            <FileText className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">{t.ribbon?.editor || "Editor"}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setQuickSwitcherMode("notes");
+              setQuickSwitcherOpen(true);
+            }}
+            className="flex flex-col items-center justify-center p-1 text-text-muted hover:text-text-primary active:scale-95 transition-transform"
+            title="Search"
+          >
+            <Search className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 font-medium">{t.sidebar?.search || "Search"}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveView("graph");
+              setLeftSidebarOpen(false);
+            }}
+            className={`flex flex-col items-center justify-center p-1 active:scale-95 transition-transform ${
+              activeView === "graph" ? "text-accent-purple font-semibold" : "text-text-muted hover:text-text-primary"
+            }`}
+            title="Graph"
+          >
+            <Share2 className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">{t.ribbon?.graph || "Graph"}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              handleOpenCanvasView();
+              setLeftSidebarOpen(false);
+            }}
+            className={`flex flex-col items-center justify-center p-1 active:scale-95 transition-transform ${
+              activeView === "canvas" ? "text-accent-purple font-semibold" : "text-text-muted hover:text-text-primary"
+            }`}
+            title="Canvas"
+          >
+            <LayoutGrid className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">{t.ribbon?.canvas || "Canvas"}</span>
+          </button>
+
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex flex-col items-center justify-center p-1 text-text-muted hover:text-text-primary active:scale-95 transition-transform"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 font-medium">{t.ribbon?.settings || "Settings"}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Desktop Status Bar */}
+      {!isMobile && (
+        <StatusBar
+          status={statusMessage}
+          activePath={activePath}
+          content={activeContent}
+          t={t.statusBar}
+          textDirection={textDirection}
+          onToggleTextDirection={cycleTextDirection}
+        />
+      )}
 
       {/* Quick Switcher & Command Palette Modal (Ctrl+O / Ctrl+P) */}
       <QuickSwitcher

@@ -14,4 +14,7 @@ node_modules/
 /release/
 *.exe
 *.msi
+*.zip
+dist-release/
+dist-android/
 generate_icons.py

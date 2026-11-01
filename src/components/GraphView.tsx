@@ -368,6 +368,114 @@ export const GraphView: React.FC<GraphViewProps> = ({
     });
   };
 
+  // Touch gestures for mobile & tablet
+  const touchStartDist = useRef<number | null>(null);
+  const touchStartScale = useRef<number>(1);
+  const touchStartTime = useRef<number>(0);
+  const touchStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const touchNodeCandidate = useRef<GraphNode | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const touchX = (touch.clientX - rect.left - transform.x) / transform.scale;
+      const touchY = (touch.clientY - rect.top - transform.y) / transform.scale;
+      touchStartTime.current = Date.now();
+      touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+
+      // Check if touched a node (24px radius for finger touch)
+      let found: GraphNode | null = null;
+      for (const node of nodesRef.current) {
+        if (node.x !== undefined && node.y !== undefined) {
+          if (Math.hypot(node.x - touchX, node.y - touchY) <= 24) {
+            found = node;
+            break;
+          }
+        }
+      }
+
+      if (found) {
+        touchNodeCandidate.current = found;
+        draggedNode.current = found;
+        startSimulation();
+      } else {
+        touchNodeCandidate.current = null;
+        isDraggingCanvas.current = true;
+        dragStart.current = { x: touch.clientX - transform.x, y: touch.clientY - transform.y };
+      }
+    } else if (e.touches.length === 2) {
+      // 2 fingers pinch to zoom
+      isDraggingCanvas.current = false;
+      draggedNode.current = null;
+      touchNodeCandidate.current = null;
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDist.current = dist;
+      touchStartScale.current = transform.scale;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+
+      if (draggedNode.current) {
+        draggedNode.current.x = (touch.clientX - rect.left - transform.x) / transform.scale;
+        draggedNode.current.y = (touch.clientY - rect.top - transform.y) / transform.scale;
+        draggedNode.current.vx = 0;
+        draggedNode.current.vy = 0;
+        return;
+      }
+
+      if (isDraggingCanvas.current) {
+        setTransform((prev) => ({
+          ...prev,
+          x: touch.clientX - dragStart.current.x,
+          y: touch.clientY - dragStart.current.y,
+        }));
+      }
+    } else if (e.touches.length === 2 && touchStartDist.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = dist / touchStartDist.current;
+      const newScale = Math.min(Math.max(touchStartScale.current * ratio, 0.2), 4.0);
+      setTransform((prev) => ({ ...prev, scale: newScale }));
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 0) {
+      const duration = Date.now() - touchStartTime.current;
+      const lastTouch = e.changedTouches[0];
+      if (lastTouch && touchNodeCandidate.current && duration < 350) {
+        const moved = Math.hypot(
+          lastTouch.clientX - touchStartPos.current.x,
+          lastTouch.clientY - touchStartPos.current.y
+        );
+        if (moved < 15) {
+          onSelectNode(touchNodeCandidate.current.label);
+        }
+      }
+
+      touchStartDist.current = null;
+      draggedNode.current = null;
+      touchNodeCandidate.current = null;
+      isDraggingCanvas.current = false;
+    }
+  };
+
   // Resize canvas to parent
   useEffect(() => {
     const handleResize = () => {
@@ -452,7 +560,10 @@ export const GraphView: React.FC<GraphViewProps> = ({
         onMouseUp={handleMouseUp}
         onClick={handleClick}
         onWheel={handleWheel}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="w-full h-full cursor-grab active:cursor-grabbing touch-none"
       />
     </div>
   );

@@ -285,6 +285,60 @@ export const VisualCanvas: React.FC<VisualCanvasProps> = ({
     dragStart.current = { x: e.clientX - transform.x, y: e.clientY - transform.y };
   };
 
+  // Touch support for mobile canvas panning and pinch zoom
+  const touchStartDist = useRef<number | null>(null);
+  const touchStartScale = useRef<number>(1);
+
+  const handleBoardTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest(".canvas-node") || (e.target as HTMLElement).closest(".canvas-toolbar")) {
+      return;
+    }
+    setColorMenuNodeId(null);
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      isDraggingBoard.current = true;
+      dragStart.current = { x: touch.clientX - transform.x, y: touch.clientY - transform.y };
+    } else if (e.touches.length === 2) {
+      isDraggingBoard.current = false;
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDist.current = dist;
+      touchStartScale.current = transform.scale;
+    }
+  };
+
+  const handleBoardTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && isDraggingBoard.current) {
+      const touch = e.touches[0];
+      setTransform((prev) => ({
+        ...prev,
+        x: touch.clientX - dragStart.current.x,
+        y: touch.clientY - dragStart.current.y,
+      }));
+    } else if (e.touches.length === 2 && touchStartDist.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = dist / touchStartDist.current;
+      const newScale = Math.min(Math.max(touchStartScale.current * ratio, 0.25), 3.0);
+      setTransform((prev) => ({
+        ...prev,
+        scale: newScale,
+      }));
+    }
+  };
+
+  const handleBoardTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      isDraggingBoard.current = false;
+      touchStartDist.current = null;
+    }
+  };
+
   // Double click board to create card
   const handleBoardDoubleClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest(".canvas-node") || (e.target as HTMLElement).closest(".canvas-toolbar")) {
@@ -430,10 +484,13 @@ export const VisualCanvas: React.FC<VisualCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full bg-[#141414] overflow-hidden select-none font-sans"
+      className="relative w-full h-full bg-[#141414] overflow-hidden select-none font-sans touch-none"
       onMouseDown={handleBoardMouseDown}
       onDoubleClick={handleBoardDoubleClick}
       onWheel={handleWheel}
+      onTouchStart={handleBoardTouchStart}
+      onTouchMove={handleBoardTouchMove}
+      onTouchEnd={handleBoardTouchEnd}
       style={{
         backgroundImage: "radial-gradient(circle, #252525 1.2px, transparent 1.2px)",
         backgroundSize: "28px 28px",
