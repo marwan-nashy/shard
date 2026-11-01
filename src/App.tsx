@@ -35,15 +35,23 @@ import {
   PanelRight,
   X,
   Minimize2,
+  Sparkles,
 } from "lucide-react";
 import { Language, TextDirection, translations } from "./i18n";
-import { ThemePreset, BookmarkItem } from "./types";
+import { ThemePreset, BookmarkItem, FeatureFlags } from "./types";
 import { LocalGraph } from "./components/LocalGraph";
 import { TemplateModal } from "./components/TemplateModal";
 import { HistoryModal } from "./components/HistoryModal";
 import { VaultStatsModal } from "./components/VaultStatsModal";
 import { exportNoteToPdf, exportNoteToHtml } from "./utils/documentExport";
 import { saveNoteSnapshot } from "./utils/versionHistory";
+import { loadFeatureFlags, saveFeatureFlags, DEFAULT_FEATURES } from "./utils/featureFlags";
+import {
+  checkForUpdates,
+  UpdateInfo,
+  isAutoCheckEnabled,
+  setAutoCheckEnabled,
+} from "./utils/updateChecker";
 
 export default function App() {
   // Language & Direction state
@@ -184,6 +192,77 @@ export default function App() {
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [statsModalOpen, setStatsModalOpen] = useState(false);
+
+  // Modular Feature Flags (Hide features you don't like)
+  const [features, setFeatures] = useState<FeatureFlags>(() => loadFeatureFlags());
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    "general" | "language" | "appearance" | "features" | "hotkeys" | "about"
+  >("language");
+
+  const handleToggleFeature = (key: keyof FeatureFlags) => {
+    setFeatures((prev) => {
+      const updated = { ...prev, [key]: !prev[key] };
+      saveFeatureFlags(updated);
+      return updated;
+    });
+  };
+
+  const handleResetFeatures = () => {
+    saveFeatureFlags(DEFAULT_FEATURES);
+    setFeatures(DEFAULT_FEATURES);
+    setStatusMessage("All features restored to default.");
+  };
+
+  // Fallback sidebar tab if currently open tab is disabled
+  useEffect(() => {
+    if (sidebarTab === "search" && features.sidebarSearch === false) setSidebarTab("files");
+    if (sidebarTab === "tags" && features.sidebarTags === false) setSidebarTab("files");
+    if (sidebarTab === "calendar" && features.sidebarCalendar === false) setSidebarTab("files");
+    if (sidebarTab === "tasks" && features.sidebarTasks === false) setSidebarTab("files");
+    if (sidebarTab === "bookmarks" && features.sidebarBookmarks === false) setSidebarTab("files");
+  }, [features, sidebarTab]);
+
+  // In-App Updates System
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(() => isAutoCheckEnabled());
+
+  const handleCheckUpdates = useCallback(async (silent = false) => {
+    setIsCheckingUpdate(true);
+    try {
+      const info = await checkForUpdates();
+      setUpdateInfo(info);
+      if (!silent) {
+        if (info.hasUpdate) {
+          setStatusMessage(`Update available: v${info.latestVersion}`);
+        } else {
+          setStatusMessage("You are on the latest version of Shard.");
+        }
+      }
+    } catch {
+      if (!silent) {
+        setStatusMessage("Unable to check updates. Check internet connection.");
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, []);
+
+  const handleToggleAutoCheck = (enabled: boolean) => {
+    setAutoCheckEnabled(enabled);
+    setAutoCheckUpdates(enabled);
+  };
+
+  // Run automatic background update check on startup
+  useEffect(() => {
+    if (autoCheckUpdates) {
+      const timer = setTimeout(() => {
+        handleCheckUpdates(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [autoCheckUpdates, handleCheckUpdates]);
 
   // Graph data & Backlinks
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
@@ -773,7 +852,17 @@ export default function App() {
         setVaultSelectorOpen(true);
         break;
       case "open-settings":
+        setSettingsInitialTab("general");
         setSettingsOpen(true);
+        break;
+      case "open-features":
+        setSettingsInitialTab("features");
+        setSettingsOpen(true);
+        break;
+      case "check-updates":
+        setSettingsInitialTab("about");
+        setSettingsOpen(true);
+        handleCheckUpdates(false);
         break;
       case "save-note":
         saveActiveNote();
@@ -926,11 +1015,16 @@ export default function App() {
             onOpenDailyNote={handleDailyNote}
             onOpenCanvas={handleOpenCanvasView}
             onOpenVaultDialog={() => setVaultSelectorOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => {
+              setSettingsInitialTab("general");
+              setSettingsOpen(true);
+            }}
             onOpenStats={() => setStatsModalOpen(true)}
             t={t.ribbon}
             textDirection={textDirection}
             onToggleTextDirection={cycleTextDirection}
+            features={features}
+            hasUpdateAvailable={Boolean(updateInfo?.hasUpdate)}
           />
         )}
 
@@ -973,6 +1067,7 @@ export default function App() {
                   onToggleBookmark={handleToggleBookmark}
                   onUpdateNoteContent={handleUpdateNoteContent}
                   t={t.sidebar}
+                  features={features}
                 />
               </div>
             </div>
@@ -1007,6 +1102,7 @@ export default function App() {
                 onToggleBookmark={handleToggleBookmark}
                 onUpdateNoteContent={handleUpdateNoteContent}
                 t={t.sidebar}
+                features={features}
               />
             </div>
           ))}
@@ -1056,6 +1152,39 @@ export default function App() {
               </div>
             </div>
           )}
+          {/* In-App Update Alert Banner */}
+          {updateInfo?.hasUpdate && !updateBannerDismissed && (
+            <div className="bg-gradient-to-r from-accent-purple to-purple-800 text-white px-3.5 py-1.5 flex items-center justify-between text-xs shadow-md select-none shrink-0 z-30">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Update Available: v{updateInfo.latestVersion}</span>
+                </span>
+                <span className="hidden sm:inline text-purple-200 text-[11px]">
+                  (Current version: v{updateInfo.currentVersion})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSettingsInitialTab("about");
+                    setSettingsOpen(true);
+                  }}
+                  className="px-2.5 py-0.5 rounded bg-white text-purple-900 font-semibold hover:bg-purple-100 transition-colors text-[11px]"
+                >
+                  View Details & Download
+                </button>
+                <button
+                  onClick={() => setUpdateBannerDismissed(true)}
+                  className="p-1 text-purple-200 hover:text-white rounded"
+                  title="Dismiss notification"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Document Tab Bar */}
           {!isZenMode && (
             <TabBar
@@ -1120,6 +1249,7 @@ export default function App() {
                       onOpenHistory={() => setHistoryModalOpen(true)}
                       onExportPdf={handleExportPdf}
                       onExportHtml={handleExportHtml}
+                      features={features}
                     />
                   </div>
 
@@ -1132,6 +1262,7 @@ export default function App() {
                         viewMode="live"
                         allNoteTitles={allNoteTitles}
                         onNavigateToNote={() => {}}
+                        features={features}
                       />
                     </div>
                   )}
@@ -1458,7 +1589,7 @@ export default function App() {
       )}
 
       {/* Desktop Status Bar */}
-      {!isMobile && !isZenMode && (
+      {!isMobile && !isZenMode && features.statusBar !== false && (
         <StatusBar
           status={statusMessage}
           activePath={activePath}
@@ -1479,6 +1610,7 @@ export default function App() {
         allNotes={allNotes}
         onExecuteCommand={handleExecuteCommand}
         t={t}
+        features={features}
       />
 
       {/* Settings Modal (Ctrl+,) */}
@@ -1493,6 +1625,15 @@ export default function App() {
         onThemeChange={handleThemeChange}
         vaultPath={vaultPath}
         t={t.settings}
+        initialTab={settingsInitialTab}
+        features={features}
+        onToggleFeature={handleToggleFeature}
+        onResetFeatures={handleResetFeatures}
+        updateInfo={updateInfo}
+        isCheckingUpdate={isCheckingUpdate}
+        onCheckUpdate={() => handleCheckUpdates(false)}
+        autoCheckEnabled={autoCheckUpdates}
+        onToggleAutoCheck={handleToggleAutoCheck}
       />
 
       {/* Vault Selector / Welcome Modal */}

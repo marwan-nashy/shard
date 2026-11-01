@@ -16,7 +16,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import katex from "katex";
 import mermaid from "mermaid";
-import { ViewMode } from "../types";
+import { ViewMode, FeatureFlags } from "../types";
 import { FormattingToolbar } from "./FormattingToolbar";
 
 export interface EditorProps {
@@ -35,6 +35,7 @@ export interface EditorProps {
   onOpenHistory?: () => void;
   onExportPdf?: () => void;
   onExportHtml?: () => void;
+  features?: FeatureFlags;
 }
 
 // Mermaid diagram initialization
@@ -241,7 +242,10 @@ function wrapSelection(view: EditorView, prefix: string, suffix: string): boolea
 }
 
 // Live Preview Markdown Decorations Plugin
-function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void) {
+function livePreviewPlugin(
+  onNavigate: (title: string, heading?: string) => void,
+  features?: FeatureFlags
+) {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -308,7 +312,10 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
                 );
 
                 // If this is a Mermaid diagram block, render the MermaidWidget
-                if (codeBlockLang.toLowerCase() === "mermaid") {
+                if (
+                  features?.mermaidDiagrams !== false &&
+                  codeBlockLang.toLowerCase() === "mermaid"
+                ) {
                   const mCode = getCodeSnippet(codeBlockStartLine);
                   if (mCode.trim()) {
                     widgets.push(
@@ -463,16 +470,18 @@ function livePreviewPlugin(onNavigate: (title: string, heading?: string) => void
             }
 
             // 9. Inline Math $x$
-            const mathInlineRegex = /(?<!\$)\$([^\$\n]+)\$(?!\$)/g;
-            let mathMatch;
-            while ((mathMatch = mathInlineRegex.exec(text)) !== null) {
-              const formula = mathMatch[1];
-              widgets.push(
-                Decoration.widget({
-                  widget: new MathWidget(formula, false),
-                  side: 1,
-                }).range(lineStart + mathMatch.index + mathMatch[0].length)
-              );
+            if (features?.mathLatex !== false) {
+              const mathInlineRegex = /(?<!\$)\$([^\$\n]+)\$(?!\$)/g;
+              let mathMatch;
+              while ((mathMatch = mathInlineRegex.exec(text)) !== null) {
+                const formula = mathMatch[1];
+                widgets.push(
+                  Decoration.widget({
+                    widget: new MathWidget(formula, false),
+                    side: 1,
+                  }).range(lineStart + mathMatch.index + mathMatch[0].length)
+                );
+              }
             }
 
             pos = line.to + 1;
@@ -518,6 +527,7 @@ export const Editor: React.FC<EditorProps> = ({
   onOpenHistory,
   onExportPdf,
   onExportHtml,
+  features,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -808,7 +818,7 @@ export const Editor: React.FC<EditorProps> = ({
     ];
 
     if (viewMode === "live") {
-      extensions.push(livePreviewPlugin(onNavigateToNote));
+      extensions.push(livePreviewPlugin(onNavigateToNote, features));
     }
 
     const state = EditorState.create({
@@ -873,21 +883,24 @@ export const Editor: React.FC<EditorProps> = ({
   return (
     <div className={`w-full h-full overflow-hidden bg-bg-primary flex flex-col ${dirClass}`}>
       {/* Visual Formatting Toolbar */}
-      <FormattingToolbar
-        onApplyFormat={handleApplyFormat}
-        onInsertText={handleInsertText}
-        wordCount={wordCount}
-        charCount={charCount}
-        readingTimeMinutes={readingTimeMinutes}
-        textDirection={textDirection}
-        onToggleTextDirection={onToggleTextDirection}
-        onToggleZenMode={onToggleZenMode}
-        isZenMode={isZenMode}
-        onOpenTemplates={onOpenTemplates}
-        onOpenHistory={onOpenHistory}
-        onExportPdf={onExportPdf}
-        onExportHtml={onExportHtml}
-      />
+      {features?.formattingToolbar !== false && (
+        <FormattingToolbar
+          onApplyFormat={handleApplyFormat}
+          onInsertText={handleInsertText}
+          wordCount={wordCount}
+          charCount={charCount}
+          readingTimeMinutes={readingTimeMinutes}
+          textDirection={textDirection}
+          onToggleTextDirection={onToggleTextDirection}
+          onToggleZenMode={onToggleZenMode}
+          isZenMode={isZenMode}
+          onOpenTemplates={onOpenTemplates}
+          onOpenHistory={onOpenHistory}
+          onExportPdf={onExportPdf}
+          onExportHtml={onExportHtml}
+          features={features}
+        />
+      )}
 
       {/* CodeMirror Scroller Container */}
       <div ref={containerRef} className="w-full h-full flex-1 overflow-hidden" />

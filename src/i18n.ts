@@ -96,6 +96,16 @@ export interface Translations {
     appearance: string;
     language: string;
     plugins: string;
+    features: string;
+    featuresDesc: string;
+    updates: string;
+    checkForUpdates: string;
+    checkingUpdates: string;
+    upToDate: string;
+    updateAvailable: string;
+    downloadUpdate: string;
+    autoCheckUpdates: string;
+    resetFeatures: string;
     hotkeys: string;
     about: string;
     appLanguage: string;
@@ -217,6 +227,16 @@ export const translations: Record<Language, Translations> = {
       appearance: "Appearance",
       language: "Language & Direction",
       plugins: "Core plugins",
+      features: "Features & Modules",
+      featuresDesc: "Customize Shard to your liking. Disable or hide any features you don't use for zero bloat.",
+      updates: "Check for Updates",
+      checkForUpdates: "Check for Updates",
+      checkingUpdates: "Checking for updates...",
+      upToDate: "You're on the latest version",
+      updateAvailable: "New update available!",
+      downloadUpdate: "Download Update",
+      autoCheckUpdates: "Automatically check for updates on startup",
+      resetFeatures: "Enable All Features",
       hotkeys: "Hotkeys",
       about: "About",
       appLanguage: "Application Language",
@@ -337,6 +357,16 @@ export const translations: Record<Language, Translations> = {
       appearance: "المظهر",
       language: "اللغة والاتجاه",
       plugins: "الملحقات الأساسية",
+      features: "الميزات والوحدات",
+      featuresDesc: "خصص شارد وفقاً لأسلوبك. يمكنك إخفاء أو تعطيل أي ميزة لا تحتاجها للحصول على تجربة نقية بدون أي زيادة.",
+      updates: "التحقق من التحديثات",
+      checkForUpdates: "التحقق من التحديثات الآن",
+      checkingUpdates: "جارٍ التحقق من التحديثات...",
+      upToDate: "أنت تستخدم أحدث إصدار متوفر",
+      updateAvailable: "يوجد إصدار أحدث متاح للتحميل!",
+      downloadUpdate: "تنزيل التحديث",
+      autoCheckUpdates: "التحقق التلقائي من التحديثات عند بدء التشغيل",
+      resetFeatures: "تفعيل كافة الميزات",
       hotkeys: "اختصارات المفاتيح",
       about: "حول شارد",
       appLanguage: "لغة التطبيق",

@@ -131,3 +131,29 @@ export interface CanvasData {
   nodes: CanvasNodeData[];
   edges: CanvasEdgeData[];
 }
+
+export interface FeatureFlags {
+  // Core Views
+  graphView: boolean;
+  canvasView: boolean;
+  dailyNotes: boolean;
+  vaultStats: boolean;
+
+  // Left Sidebar Panes
+  sidebarSearch: boolean;
+  sidebarTags: boolean;
+  sidebarCalendar: boolean;
+  sidebarTasks: boolean;
+  sidebarBookmarks: boolean;
+
+  // Editor & Formatting
+  formattingToolbar: boolean;
+  voiceDictation: boolean;
+  templates: boolean;
+  versionHistory: boolean;
+  mermaidDiagrams: boolean;
+  mathLatex: boolean;
+  documentExport: boolean;
+  statusBar: boolean;
+}
+

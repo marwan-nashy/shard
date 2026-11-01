@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { SearchResult, CommandItem } from "../types";
+import { SearchResult, CommandItem, FeatureFlags } from "../types";
 import { Translations } from "../i18n";
 import {
   Search,
@@ -31,6 +31,7 @@ interface QuickSwitcherProps {
   // Commands execution actions
   onExecuteCommand?: (commandId: string) => void;
   t?: Translations;
+  features?: FeatureFlags;
 }
 
 export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
@@ -42,6 +43,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   allNotes,
   onExecuteCommand,
   t,
+  features,
 }) => {
   const [mode, setMode] = useState<"notes" | "commands">(initialMode);
   const [query, setQuery] = useState("");
@@ -194,6 +196,20 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
       action: () => onExecuteCommand?.("open-settings"),
     },
     {
+      id: "open-features",
+      title: "Customize Features & Modules...",
+      description: "Enable or hide features for zero-bloat",
+      category: "Settings",
+      action: () => onExecuteCommand?.("open-features"),
+    },
+    {
+      id: "check-updates",
+      title: "Check for Updates...",
+      description: "Check GitHub releases for the latest Shard update",
+      category: "App",
+      action: () => onExecuteCommand?.("check-updates"),
+    },
+    {
       id: "save-note",
       title: "Save Note",
       description: "Flush current buffer to local disk",
@@ -232,8 +248,18 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
     },
   ];
 
-  // Filter commands by search query
+  // Filter commands by active feature flags and search query
   const filteredCommands = commands.filter((c) => {
+    if (features) {
+      if (features.graphView === false && c.id === "open-graph") return false;
+      if (features.canvasView === false && (c.id === "open-canvas" || c.id === "new-canvas")) return false;
+      if (features.dailyNotes === false && c.id === "daily-note") return false;
+      if (features.vaultStats === false && c.id === "open-stats") return false;
+      if (features.templates === false && c.id === "open-templates") return false;
+      if (features.versionHistory === false && c.id === "open-history") return false;
+      if (features.documentExport === false && (c.id === "export-pdf" || c.id === "export-html")) return false;
+    }
+
     if (!query.trim()) return true;
     const cleanQuery = query.replace(/^>/, "").trim().toLowerCase();
     if (!cleanQuery) return true;

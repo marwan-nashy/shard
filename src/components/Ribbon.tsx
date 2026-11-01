@@ -12,6 +12,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Translations, TextDirection } from "../i18n";
+import { FeatureFlags } from "../types";
 
 interface RibbonProps {
   activeView: "editor" | "graph" | "canvas";
@@ -26,6 +27,8 @@ interface RibbonProps {
   t?: Translations["ribbon"];
   textDirection?: TextDirection;
   onToggleTextDirection?: () => void;
+  features?: FeatureFlags;
+  hasUpdateAvailable?: boolean;
 }
 
 export const Ribbon: React.FC<RibbonProps> = ({
@@ -41,6 +44,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
   t,
   textDirection = "auto",
   onToggleTextDirection,
+  features,
+  hasUpdateAvailable = false,
 }) => {
   return (
     <div className="w-[42px] bg-bg-secondary border-r border-border-subtle flex flex-col justify-between py-2 select-none z-20">
@@ -81,40 +86,46 @@ export const Ribbon: React.FC<RibbonProps> = ({
           <Search className="w-4 h-4" />
         </button>
 
-        <button
-          onClick={() => onToggleView("graph")}
-          className={`p-2 rounded-md transition-colors ${
-            activeView === "graph"
-              ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title={t?.graph || "Graph View (Ctrl+G)"}
-        >
-          <Share2 className="w-4 h-4" />
-        </button>
+        {features?.graphView !== false && (
+          <button
+            onClick={() => onToggleView("graph")}
+            className={`p-2 rounded-md transition-colors ${
+              activeView === "graph"
+                ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title={t?.graph || "Graph View (Ctrl+G)"}
+          >
+            <Share2 className="w-4 h-4" />
+          </button>
+        )}
 
-        <button
-          onClick={() => {
-            if (onOpenCanvas) onOpenCanvas();
-            else onToggleView("canvas");
-          }}
-          className={`p-2 rounded-md transition-colors ${
-            activeView === "canvas"
-              ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title={t?.canvas || "Visual Canvas"}
-        >
-          <LayoutGrid className="w-4 h-4" />
-        </button>
+        {features?.canvasView !== false && (
+          <button
+            onClick={() => {
+              if (onOpenCanvas) onOpenCanvas();
+              else onToggleView("canvas");
+            }}
+            className={`p-2 rounded-md transition-colors ${
+              activeView === "canvas"
+                ? "bg-bg-card text-accent-purple border-l-2 border-accent-purple rounded-l-none"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title={t?.canvas || "Visual Canvas"}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+        )}
 
-        <button
-          onClick={onOpenDailyNote}
-          className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
-          title={t?.dailyNote || "Today's Daily Note"}
-        >
-          <Calendar className="w-4 h-4" />
-        </button>
+        {features?.dailyNotes !== false && (
+          <button
+            onClick={onOpenDailyNote}
+            className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
+            title={t?.dailyNote || "Today's Daily Note"}
+          >
+            <Calendar className="w-4 h-4" />
+          </button>
+        )}
 
         <button
           onClick={onOpenQuickSwitcher}
@@ -124,7 +135,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
           <Terminal className="w-4 h-4" />
         </button>
 
-        {onOpenStats && (
+        {features?.vaultStats !== false && onOpenStats && (
           <button
             onClick={onOpenStats}
             className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
@@ -161,10 +172,13 @@ export const Ribbon: React.FC<RibbonProps> = ({
 
         <button
           onClick={onOpenSettings}
-          className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
-          title={t?.settings || "Settings (Ctrl+,)"}
+          className="p-2 text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors relative"
+          title={hasUpdateAvailable ? "Settings (Update Available!)" : (t?.settings || "Settings (Ctrl+,)")}
         >
           <Settings className="w-4 h-4" />
+          {hasUpdateAvailable && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent-purple ring-2 ring-bg-secondary animate-pulse" />
+          )}
         </button>
       </div>
     </div>

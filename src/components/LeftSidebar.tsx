@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { FileNode, SearchResult, SidebarTab, OutlineItem, BookmarkItem } from "../types";
+import { FileNode, SearchResult, SidebarTab, OutlineItem, BookmarkItem, FeatureFlags } from "../types";
 import { Translations } from "../i18n";
 import { FileTree } from "./FileTree";
 import { CalendarPane } from "./CalendarPane";
@@ -45,6 +45,7 @@ interface LeftSidebarProps {
   onToggleBookmark?: (path: string, title?: string, type?: "note" | "canvas") => void;
   onUpdateNoteContent?: (path: string, newContent: string) => void;
   t?: Translations["sidebar"];
+  features?: FeatureFlags;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -69,6 +70,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onToggleBookmark,
   onUpdateNoteContent,
   t,
+  features,
 }) => {
   // Search View State
   const [searchQuery, setSearchQuery] = useState("");
@@ -143,65 +145,75 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <Folder className="w-3.5 h-3.5" />
         </button>
 
-        <button
-          onClick={() => onTabChange("search")}
-          className={`p-1.5 rounded transition-colors ${
-            activeTab === "search"
-              ? "bg-bg-card text-accent-purple font-medium"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title={t?.search || "Search"}
-        >
-          <Search className="w-3.5 h-3.5" />
-        </button>
+        {features?.sidebarSearch !== false && (
+          <button
+            onClick={() => onTabChange("search")}
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === "search"
+                ? "bg-bg-card text-accent-purple font-medium"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title={t?.search || "Search"}
+          >
+            <Search className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange("tags")}
-          className={`p-1.5 rounded transition-colors ${
-            activeTab === "tags"
-              ? "bg-bg-card text-accent-purple font-medium"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title={t?.tags || "Tags"}
-        >
-          <Tag className="w-3.5 h-3.5" />
-        </button>
+        {features?.sidebarTags !== false && (
+          <button
+            onClick={() => onTabChange("tags")}
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === "tags"
+                ? "bg-bg-card text-accent-purple font-medium"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title={t?.tags || "Tags"}
+          >
+            <Tag className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange("calendar")}
-          className={`p-1.5 rounded transition-colors ${
-            activeTab === "calendar"
-              ? "bg-bg-card text-accent-purple font-medium"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title="Daily Notes Calendar"
-        >
-          <CalendarIcon className="w-3.5 h-3.5" />
-        </button>
+        {features?.sidebarCalendar !== false && (
+          <button
+            onClick={() => onTabChange("calendar")}
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === "calendar"
+                ? "bg-bg-card text-accent-purple font-medium"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title="Daily Notes Calendar"
+          >
+            <CalendarIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange("tasks")}
-          className={`p-1.5 rounded transition-colors ${
-            activeTab === "tasks"
-              ? "bg-bg-card text-accent-purple font-medium"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title="Vault Tasks"
-        >
-          <CheckSquare className="w-3.5 h-3.5" />
-        </button>
+        {features?.sidebarTasks !== false && (
+          <button
+            onClick={() => onTabChange("tasks")}
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === "tasks"
+                ? "bg-bg-card text-accent-purple font-medium"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title="Vault Tasks"
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange("bookmarks")}
-          className={`p-1.5 rounded transition-colors ${
-            activeTab === "bookmarks"
-              ? "bg-bg-card text-accent-purple font-medium"
-              : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          }`}
-          title="Bookmarks"
-        >
-          <BookmarkIcon className="w-3.5 h-3.5" />
-        </button>
+        {features?.sidebarBookmarks !== false && (
+          <button
+            onClick={() => onTabChange("bookmarks")}
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === "bookmarks"
+                ? "bg-bg-card text-accent-purple font-medium"
+                : "text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            }`}
+            title="Bookmarks"
+          >
+            <BookmarkIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         <button
           onClick={() => onTabChange("outline")}

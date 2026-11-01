@@ -30,6 +30,8 @@ import {
   FileDown,
 } from "lucide-react";
 
+import { FeatureFlags } from "../types";
+
 interface FormattingToolbarProps {
   onApplyFormat: (type: string, arg?: string) => void;
   onInsertText?: (text: string) => void;
@@ -44,6 +46,7 @@ interface FormattingToolbarProps {
   onOpenHistory?: () => void;
   onExportPdf?: () => void;
   onExportHtml?: () => void;
+  features?: FeatureFlags;
 }
 
 export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
@@ -60,6 +63,7 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
   onOpenHistory,
   onExportPdf,
   onExportHtml,
+  features,
 }) => {
   const [calloutMenuOpen, setCalloutMenuOpen] = useState(false);
   const [headingMenuOpen, setHeadingMenuOpen] = useState(false);
@@ -282,20 +286,27 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
         >
           <Table className="w-3.5 h-3.5" />
         </button>
-        <button
-          onClick={() => onApplyFormat("math")}
-          className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          title="LaTeX Math Formula ($x$)"
-        >
-          <Sigma className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => onApplyFormat("mermaid")}
-          className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
-          title="Mermaid Diagram Flowchart"
-        >
-          <GitFork className="w-3.5 h-3.5" />
-        </button>
+
+        {features?.mathLatex !== false && (
+          <button
+            onClick={() => onApplyFormat("math")}
+            className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover"
+            title="LaTeX Math Formula ($x$)"
+          >
+            <Sigma className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {features?.mermaidDiagrams !== false && (
+          <button
+            onClick={() => onApplyFormat("mermaid")}
+            className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+            title="Mermaid Diagram Flowchart"
+          >
+            <GitFork className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         <button
           onClick={() => onApplyFormat("divider")}
           className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover"
@@ -307,24 +318,26 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
         <div className="w-[1px] h-4 bg-border-subtle mx-1" />
 
         {/* Voice Dictation (Speech-to-Text) */}
-        <button
-          onClick={toggleDictation}
-          className={`p-1 rounded transition-all flex items-center gap-1 ${
-            isListening
-              ? "text-red-500 bg-red-500/15 animate-pulse shadow-xs"
-              : "text-text-muted hover:text-accent-purple hover:bg-bg-hover"
-          }`}
-          title={
-            isListening
-              ? "Listening... Speak now (English or Arabic)"
-              : "Voice Dictation (Speech to Text)"
-          }
-        >
-          {isListening ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 opacity-80" />}
-        </button>
+        {features?.voiceDictation !== false && (
+          <button
+            onClick={toggleDictation}
+            className={`p-1 rounded transition-all flex items-center gap-1 ${
+              isListening
+                ? "text-red-500 bg-red-500/15 animate-pulse shadow-xs"
+                : "text-text-muted hover:text-accent-purple hover:bg-bg-hover"
+            }`}
+            title={
+              isListening
+                ? "Listening... Speak now (English or Arabic)"
+                : "Voice Dictation (Speech to Text)"
+            }
+          >
+            {isListening ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 opacity-80" />}
+          </button>
+        )}
 
         {/* Smart Templates Button */}
-        {onOpenTemplates && (
+        {features?.templates !== false && onOpenTemplates && (
           <button
             onClick={onOpenTemplates}
             className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
@@ -335,7 +348,7 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
         )}
 
         {/* Note Revision History */}
-        {onOpenHistory && (
+        {features?.versionHistory !== false && onOpenHistory && (
           <button
             onClick={onOpenHistory}
             className="p-1 rounded text-text-muted hover:text-accent-purple hover:bg-bg-hover"
@@ -346,7 +359,7 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
         )}
 
         {/* Export Dropdown */}
-        {(onExportPdf || onExportHtml) && (
+        {features?.documentExport !== false && (onExportPdf || onExportHtml) && (
           <div className="relative">
             <button
               onClick={() => setExportMenuOpen(!exportMenuOpen)}
@@ -403,13 +416,15 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
           </button>
         )}
 
-        <div className="hidden sm:flex items-center gap-2">
-          <span>{wordCount} words</span>
-          <span>•</span>
-          <span>{charCount} chars</span>
-          <span>•</span>
-          <span>{readingTimeMinutes} min read</span>
-        </div>
+        {features?.statusBar !== false && (
+          <div className="hidden sm:flex items-center gap-2">
+            <span>{wordCount} words</span>
+            <span>•</span>
+            <span>{charCount} chars</span>
+            <span>•</span>
+            <span>{readingTimeMinutes} min read</span>
+          </div>
+        )}
 
         {onToggleZenMode && (
           <button
